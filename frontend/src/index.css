@@ -1,0 +1,185 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f5f5f5;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+
+.page-header {
+  background: white;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.content-wrapper {
+  padding: 24px;
+  background: white;
+  min-height: calc(100vh - 112px);
+}
+
+.skill-chip {
+  margin: 4px;
+}
+
+.match-percentage {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.match-percentage.high {
+  color: #52c41a;
+}
+
+.match-percentage.medium {
+  color: #faad14;
+}
+
+.match-percentage.low {
+  color: #f5222d;
+}
+
+.job-card {
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.job-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.upload-area {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  background: #fafafa;
+  transition: border-color 0.3s;
+}
+
+.upload-area:hover {
+  border-color: #1890ff;
+}
+
+.upload-area.active {
+  border-color: #1890ff;
+  background: #f0f8ff;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.pending {
+  background: #fff7e6;
+  color: #fa8c16;
+  border: 1px solid #ffd591;
+}
+
+.status-badge.processing {
+  background: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.status-badge.completed {
+  background: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.status-badge.failed {
+  background: #fff2f0;
+  color: #f5222d;
+  border: 1px solid #ffccc7;
+}
+
+.dashboard-card {
+  text-align: center;
+  padding: 24px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-card .number {
+  font-size: 32px;
+  font-weight: bold;
+  color: #1890ff;
+  margin-bottom: 8px;
+}
+
+.dashboard-card .label {
+  color: #666;
+  font-size: 14px;
+}
+
+.skill-gap-item {
+  padding: 12px;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: white;
+}
+
+.skill-gap-item .skill-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.skill-gap-item .priority {
+  font-size: 12px;
+  color: #666;
+}
+
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+}
+
+.error-message {
+  color: #f5222d;
+  text-align: center;
+  padding: 20px;
+}
+
+.success-message {
+  color: #52c41a;
+  text-align: center;
+  padding: 20px;
+}
+
+@media (max-width: 768px) {
+  .content-wrapper {
+    padding: 16px;
+  }
+  
+  .page-header {
+    padding: 12px 16px;
+  }
+  
+  .job-card {
+    margin-bottom: 12px;
+  }
+}

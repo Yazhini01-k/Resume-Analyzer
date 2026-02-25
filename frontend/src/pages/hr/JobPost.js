@@ -18,7 +18,16 @@ const JobPost = () => {
     'job-skills',
     jobsAPI.getSkills,
     {
-      select: (data) => data.data,
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
     }
   );
 
@@ -42,11 +51,13 @@ const JobPost = () => {
     // Format the data for API
     const jobData = {
       ...values,
-      skill_requirements: values.required_skills.map((skillId, index) => ({
-        skill_id: skillId,
-        importance: 'required',
-        experience_years: 0,
-      })),
+      skill_requirements: Array.isArray(values.required_skills) 
+        ? values.required_skills.map((skillId, index) => ({
+            skill_id: skillId,
+            importance: 'required',
+            experience_years: 0,
+          }))
+        : [],
     };
 
     try {
@@ -192,7 +203,7 @@ const JobPost = () => {
                 placeholder="Select required skills"
                 style={{ width: '100%' }}
               >
-                {jobSkills?.map((skill) => (
+                {Array.isArray(jobSkills) && jobSkills.map((skill) => (
                   <Option key={skill.id} value={skill.id}>
                     {skill.name}
                   </Option>

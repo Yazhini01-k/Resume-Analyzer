@@ -21,10 +21,19 @@ const CandidateDashboard = () => {
     'resumes',
     resumeAPI.getList,
     {
-      select: (response) =>
-        Array.isArray(response?.data?.results)
-          ? response.data.results
-          : response?.data || [],
+      select: (response) => {
+        // Handle paginated response
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        // Handle direct array response
+        if (Array.isArray(data)) {
+          return data;
+        }
+        // Handle case where data is null/undefined
+        return [];
+      },
     }
   );
 
@@ -33,10 +42,21 @@ const CandidateDashboard = () => {
     'job-recommendations',
     jobsAPI.getRecommendations,
     {
-      select: (response) =>
-        Array.isArray(response?.data?.results)
-          ? response.data.results
-          : response?.data?.recommendations || [],
+      select: (response) => {
+        // Handle paginated response
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        // Handle direct array response
+        if (Array.isArray(data?.recommendations)) {
+          return data.recommendations;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
     }
   );
 
@@ -45,10 +65,18 @@ const CandidateDashboard = () => {
     'applications',
     applicationsAPI.getList,
     {
-      select: (response) =>
-        Array.isArray(response?.data?.results)
-          ? response.data.results
-          : response?.data || [],
+      select: (response) => {
+        // Handle paginated response
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        // Handle direct array response
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
     }
   );
 

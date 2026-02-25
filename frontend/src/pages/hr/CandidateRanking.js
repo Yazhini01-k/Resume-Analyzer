@@ -30,7 +30,16 @@ const CandidateRanking = () => {
     'my-posted-jobs',
     jobsAPI.getMyPostedJobs,
     {
-      select: (data) => data.data,
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
     }
   );
 
@@ -42,7 +51,16 @@ const CandidateRanking = () => {
       return jobsAPI.rankCandidates(selectedJob, threshold);
     },
     {
-      select: (data) => data.data,
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.candidates)) {
+          return data.candidates;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
       enabled: !!selectedJob,
     }
   );

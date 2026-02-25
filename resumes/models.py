@@ -40,6 +40,8 @@ class Resume(models.Model):
         default='pending'
     )
     error_message = models.TextField(blank=True, null=True)
+    job_match_count = models.IntegerField(default=0)
+    matched_jobs = models.JSONField(default=list, blank=True)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)

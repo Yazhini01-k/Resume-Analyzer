@@ -36,7 +36,19 @@ const JobRecommendations = () => {
     ['job-recommendations', filters],
     () => jobsAPI.getRecommendations(),
     {
-      select: (data) => data.data || [],
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        if (Array.isArray(data?.recommendations)) {
+          return data.recommendations;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
       onSuccess: (data) => {
         console.log('Recommendations loaded:', data);
       },
@@ -48,7 +60,16 @@ const JobRecommendations = () => {
     'all-jobs',
     () => jobsAPI.getList(filters),
     {
-      select: (data) => data.data,
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
       enabled: !!filters.search || !!filters.location || !!filters.job_type || !!filters.experience_level,
     }
   );
@@ -58,7 +79,17 @@ const JobRecommendations = () => {
     'resumes',
     resumeAPI.getList,
     {
-      select: (data) => data.data,
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
+      enabled: true,
     }
   );
 
@@ -136,7 +167,7 @@ const JobRecommendations = () => {
   };
 
   const displayJobs = filters.search || filters.location || filters.job_type || filters.experience_level 
-    ? allJobs?.results || [] 
+    ? allJobs || [] 
     : recommendations || [];
 
   return (

@@ -22,7 +22,16 @@ const HRDashboard = () => {
     'my-posted-jobs',
     jobsAPI.getMyPostedJobs,
     {
-      select: (data) => data.data,
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
     }
   );
 
@@ -31,7 +40,7 @@ const HRDashboard = () => {
     'application-statistics',
     applicationsAPI.getStatistics,
     {
-      select: (data) => data.data,
+      select: (response) => response?.data || {},
     }
   );
 
@@ -40,7 +49,16 @@ const HRDashboard = () => {
     'recent-applications',
     () => applicationsAPI.getList({ limit: 5 }),
     {
-      select: (data) => data.data,
+      select: (response) => {
+        const data = response?.data;
+        if (Array.isArray(data?.results)) {
+          return data.results;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
+        return [];
+      },
     }
   );
 

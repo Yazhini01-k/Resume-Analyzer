@@ -243,7 +243,7 @@ class JobMatch(models.Model):
     
     resume = models.ForeignKey('resumes.Resume', on_delete=models.CASCADE, related_name='job_matches')
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='resume_matches')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='job_recommendations')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='job_recommendations', null=True, blank=True)
     
     # Match scores (0-100)
     overall_score = models.FloatField(default=0.0, db_index=True)

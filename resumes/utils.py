@@ -231,8 +231,8 @@ class FeatureVectorizer:
             max_features=max_features,
             stop_words='english',
             ngram_range=(1, 2),
-            min_df=2,
-            max_df=0.8
+            min_df=1,
+            max_df=1.0
         )
         self.is_fitted = False
     

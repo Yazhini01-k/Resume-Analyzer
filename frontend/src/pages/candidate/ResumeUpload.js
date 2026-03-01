@@ -28,7 +28,6 @@ const ResumeUpload = () => {
 
   const queryClient = useQueryClient();
 
-
   // Fetch existing resumes with real-time updates
 
   const { data: resumes } = useQuery(
@@ -575,7 +574,11 @@ const ResumeUpload = () => {
 
                               <div style={{ marginBottom: 20 }}>
 
+<<<<<<< HEAD
                                 <Title level={4} style={{ marginBottom: 8, color: '#fa8c16' }}>
+=======
+                                <Title level={4} style={{ marginBottom: 8 , color: '#fa8c16' }}>
+>>>>>>> 361e808 (did small changes in UI, fixes repeated skill and now checking if homepage works)
 
                                   Education
 
@@ -1506,8 +1509,6 @@ const styles = `
     font-weight: bold;
   }
 `;
-
-
 
 // Inject styles
 

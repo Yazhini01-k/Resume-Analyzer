@@ -314,3 +314,5 @@ class FeatureVectorizer:
         if not self.is_fitted:
             raise ValueError("Vectorizer must be fitted first")
         return self.vectorizer.get_feature_names_out().tolist()
+
+#commit command changes to git

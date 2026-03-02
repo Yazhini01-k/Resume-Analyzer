@@ -149,3 +149,6 @@
     margin: 16px 8px !important;
   }
 }
+.ant-col {
+  min-width: 250px !important;
+}

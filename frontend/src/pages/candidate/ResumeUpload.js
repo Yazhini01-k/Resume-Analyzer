@@ -22,6 +22,10 @@ const ResumeUpload = () => {
 
   const [selectedResume, setSelectedResume] = useState(null);
 
+  const [showTopAnalysis, setShowTopAnalysis] = useState(
+  sessionStorage.getItem("showTopAnalysis") === "true"
+);
+
   const queryClient = useQueryClient();
 
 
@@ -72,6 +76,8 @@ const ResumeUpload = () => {
 
       setUploadProgress(100);
 
+      setShowTopAnalysis(true);
+      sessionStorage.setItem("showTopAnalysis", "true");
       
 
       // Invalidate queries to refresh data
@@ -386,7 +392,7 @@ const ResumeUpload = () => {
 
               {/* Latest Resume Analysis - Unified Layout */}
 
-              {Array.isArray(resumes) && resumes.length > 0 && (
+              {showTopAnalysis && Array.isArray(resumes) && resumes.length > 0 && (
 
                 <div style={{ marginTop: 24 }}>
 

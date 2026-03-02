@@ -1,3 +1,4 @@
+from ast import pattern
 import os
 import json
 import re
@@ -78,13 +79,68 @@ class ResumeParser:
         
         # Common skill keywords
         self.skill_keywords = [
-            'python', 'java', 'javascript', 'react', 'django', 'node.js', 'sql',
-            'html', 'css', 'aws', 'docker', 'kubernetes', 'git', 'linux', 'mongodb',
-            'postgresql', 'mysql', 'redis', 'elasticsearch', 'tensorflow', 'pytorch',
-            'machine learning', 'data science', 'artificial intelligence', 'deep learning',
-            'nlp', 'computer vision', 'api', 'rest', 'graphql', 'microservices',
-            'agile', 'scrum', 'devops', 'ci/cd', 'testing', 'unit testing',
-            'integration testing', 'ui', 'ux', 'frontend', 'backend', 'full stack'
+             # Programming Languages
+            'python', 'java', 'javascript', 'typescript' , 'c++', 'c#',
+            'rust', 'kotlin', 'swift', 'php', 'ruby', 'dart', 'r language',
+            'matlab', 'bash', 'powershell',
+
+            # Frontend
+            'html', 'css', 'sass', 'bootstrap', 'tailwind', 
+            'react', 'next.js', 'angular', 'vue', 'redux',
+
+            # Backend
+            'node.js', 'express', 'django', 'flask', 'fastapi',
+            'spring', 'spring boot', 'laravel', 'asp.net',
+
+            # Mobile Development
+            'android', 'ios', 'react native', 'flutter', 'xamarin',
+
+            # Databases
+            'mysql', 'postgresql', 'mongodb', 'sqlite', 'oracle',
+            'redis', 'firebase', 'cassandra', 'dynamodb',
+
+            # Cloud Platforms
+            'aws', 'azure', 'gcp', 'google cloud', 'heroku',
+
+            # DevOps & Tools
+            'docker', 'kubernetes', 'jenkins', 'github actions',
+            'gitlab', 'terraform', 'ansible', 'linux', 'nginx',
+
+            # APIs & Architecture
+            'rest api', 'graphql', 'microservices',
+
+            # Data Science & AI
+            'machine learning', 'deep learning', 'data science',
+            'artificial intelligence', 'nlp', 'computer vision',
+            'tensorflow', 'pytorch', 'scikit-learn',
+            'pandas', 'numpy', 'matplotlib', 'seaborn',
+            'opencv', 'xgboost',
+
+            # Big Data
+            'hadoop', 'spark', 'kafka', 'hive',
+
+            # Testing
+            'unit testing', 'integration testing',
+            'selenium', 'jest', 'pytest',
+
+            # UI/UX
+            'ui/ux', 'figma', 'adobe xd', 'photoshop', 'illustrator',
+
+            # Version Control
+            'git', 'github', 'bitbucket',
+
+            # Methodologies
+            'agile', 'scrum',
+
+            # Security
+            'cybersecurity', 'penetration testing',
+            'ethical hacking', 'owasp',
+
+            # ERP / CRM
+            'sap', 'salesforce',
+
+            # Data & BI Tools
+            'tableau', 'power bi'
         ]
         
         # Education keywords
@@ -131,29 +187,33 @@ class ResumeParser:
         """Extract skills from resume text"""
         skills = set()
         text_lower = original_text.lower()
+        for skill in sorted(self.skill_keywords, key=len, reverse=True):
+            pattern = r'\b' + re.escape(skill.lower()) + r'\b'
+            if re.search(pattern, text_lower):
+                skills.add(skill.lower())
         
-        # Check for skill keywords
-        for skill in self.skill_keywords:
-            if skill in text_lower:
-                skills.add(skill)
         
         # Use NLP to extract technical terms
         doc = self.nlp(original_text)
         
-        # Extract named entities that might be skills
-        for ent in doc.ents:
-            if ent.label_ in ['ORG', 'PRODUCT']:
-                ent_text = ent.text.lower()
-                if any(keyword in ent_text for keyword in ['python', 'java', 'javascript', 'sql']):
-                    skills.add(ent.text)
         
-        # Extract noun chunks that might be skills
-        for chunk in doc.noun_chunks:
-            chunk_text = chunk.text.lower()
-            if any(keyword in chunk_text for keyword in self.skill_keywords):
-                skills.add(chunk.text)
-        
-        return list(skills)
+        skills_list = list(skills)
+
+        # Remove duplicates (case insensitive)
+        unique_skills = list({
+            skill.strip().lower(): skill.strip()
+            for skill in skills_list
+            }.values())
+
+            # Remove long broken sentences (garbage extraction)
+        unique_skills = [s for s in unique_skills if len(s.split()) <= 3]
+            # Optional: Remove standalone "sql" if mysql exists
+        if any("mysql" in s.lower() for s in unique_skills):
+               unique_skills = [s for s in unique_skills if s.lower() != "sql"]
+        if "javascript" in unique_skills and "java" in unique_skills:
+            unique_skills.remove("java")
+
+        return unique_skills
     
     def _extract_education(self, text):
         """Extract education information"""

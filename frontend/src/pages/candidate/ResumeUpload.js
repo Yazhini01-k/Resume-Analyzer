@@ -25,7 +25,6 @@ const ResumeUpload = () => {
   const queryClient = useQueryClient();
 
 
-
   // Fetch existing resumes with real-time updates
 
   const { data: resumes } = useQuery(
@@ -399,17 +398,17 @@ const ResumeUpload = () => {
 
                     return (
 
-                      <Card className="unified-resume-card">
+                      <Card className="unified-resume-card" style={{ maxWidth: 400, margin: '0 auto' }}>
 
-                        <Row gutter={[24, 24]}>
+                        <Row gutter={[16, 16]}>
 
                           {/* Left Section - Resume Score */}
 
-                          <Col xs={24} md={8}>
+                          <Col xs={24} md={8} lg={12}>
 
-                            <div style={{ textAlign: 'center', padding: '20px' }}>
+                            <div style={{ textAlign: 'center', padding: '0 4px 8px 4px' }}>
 
-                              <Title level={3} style={{ marginBottom: 16, color: '#1890ff' }}>
+                              <Title level={3} style={{ margin:'4px 0', color: '#1890ff', fontSize: '34px', fontStyle: 'times new roman' }}>
 
                                 Resume Score
 
@@ -421,7 +420,7 @@ const ResumeUpload = () => {
 
                                   <div style={{
 
-                                    fontSize: '64px',
+                                    fontSize: '60px',
 
                                     fontWeight: 'bold',
 
@@ -429,9 +428,9 @@ const ResumeUpload = () => {
 
                                            latestResume.analysis.overall_score >= 60 ? '#fa8c16' : '#ff4d4f',
 
-                                    marginBottom: '16px',
+                                    margin: '8px 0',
 
-                                    lineHeight: 1
+                                    lineHeight: 1.5
 
                                   }}>
 
@@ -489,9 +488,9 @@ const ResumeUpload = () => {
 
                           <Col xs={24} md={8}>
 
-                            <div style={{ padding: '20px' }}>
+                            <div style={{ padding: '0px 12px 12px 12px' }}>
 
-                              <Title level={4} style={{ marginBottom: 20, color: '#52c41a' }}>
+                              <Title level={4} style={{ margin: 8, color: '#52c41a' }}>
 
                                 Skills
 
@@ -515,32 +514,27 @@ const ResumeUpload = () => {
 
                                     <Space direction="vertical" size="small" style={{ width: '100%' }}>
 
-                                      {latestResume.extracted_skills.map((skill, index) => (
-
+                                     {Array.from(
+                                        new Set(
+                                          latestResume.extracted_skills.map(skill =>
+                                            skill.trim().toLowerCase()
+                                          )
+                                        )
+                                      ).map((skill, index) => (
                                         <div key={index} style={{ 
-
                                           display: 'flex', 
-
                                           justifyContent: 'space-between', 
-
                                           alignItems: 'center',
-
                                           padding: '12px 16px',
-
                                           backgroundColor: '#f6ffed',
-
                                           borderRadius: '8px',
-
                                           border: '1px solid #b7eb8f'
-
                                         }}>
-
-                                          <Text style={{ fontSize: '14px', fontWeight: '500' }}>{skill}</Text>
-
+                                          <Text style={{ fontSize: '14px', fontWeight: '500' }}>
+                                            {skill.charAt(0).toUpperCase() + skill.slice(1)}
+                                          </Text>
                                           <Tag color="green" size="small" style={{ fontWeight: 'bold' }}>85%</Tag>
-
                                         </div>
-
                                       ))}
 
                                     </Space>
@@ -569,13 +563,13 @@ const ResumeUpload = () => {
 
                           <Col xs={24} md={8}>
 
-                            <div style={{ padding: '20px' }}>
+                            <div style={{ padding: '0px 12px 12px 12px' }}>
 
                               {/* Education */}
 
-                              <div style={{ marginBottom: 32 }}>
+                              <div style={{ marginBottom: 20 }}>
 
-                                <Title level={4} style={{ marginBottom: 16, color: '#fa8c16' }}>
+                                <Title level={4} style={{ marginBottom: 8, color: '#fa8c16' }}>
 
                                   Education
 
@@ -1435,145 +1429,76 @@ const ResumeUpload = () => {
 // Add custom styles
 
 const styles = `
-
   .upload-area {
-
     border: 2px dashed #d9d9d9;
-
     border-radius: 8px;
-
     padding: 40px;
-
     text-align: center;
-
     background: #fafafa;
-
     transition: all 0.3s ease;
 
   }
-
   
-
   .upload-area:hover {
-
     border-color: #1890ff;
-
     background: #f0f8ff;
-
   }
-
-  
 
   .unified-resume-card {
-
     border-radius: 16px;
-
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-
     border: 1px solid #e8e8e8;
-
     background: linear-gradient(135deg, #ffffff 0%, #fafafa 100%);
-
     transition: all 0.3s ease;
-
   }
-
-  
 
   .unified-resume-card:hover {
-
     transform: translateY(-4px);
-
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-
   }
-
-  
 
   .resume-score-card {
-
     text-align: center;
-
     border-radius: 12px;
-
     box-shadow: 0 4px 20px rgba(24, 144, 255, 0.15);
-
     border: 2px solid #e6f7ff;
-
     background: linear-gradient(135deg, #f0f8ff 0%, #ffffff 100%);
-
   }
-
-  
 
   .skills-card {
-
     border-radius: 12px;
-
     box-shadow: 0 4px 20px rgba(82, 196, 26, 0.15);
-
     border: 2px solid #f6ffed;
-
     background: linear-gradient(135deg, #f6ffed 0%, #ffffff 100%);
-
   }
-
-  
 
   .education-card {
-
     border-radius: 12px;
-
     box-shadow: 0 4px 20px rgba(250, 140, 22, 0.15);
-
     border: 2px solid #fff7e6;
-
     background: linear-gradient(135deg, #fff7e6 0%, #ffffff 100%);
-
   }
-
-  
 
   .experience-card {
-
     border-radius: 12px;
-
     box-shadow: 0 4px 20px rgba(114, 46, 209, 0.15);
-
     border: 2px solid #f9f0ff;
-
     background: linear-gradient(135deg, #f9f0ff 0%, #ffffff 100%);
-
   }
-
-  
 
   .analysis-modal .ant-card {
-
     margin-bottom: 16px;
-
   }
-
-  
 
   .analysis-modal .ant-statistic-title {
-
     font-size: 14px;
-
     margin-bottom: 8px;
-
   }
-
-  
 
   .analysis-modal .ant-statistic-content {
-
     font-size: 24px;
-
     font-weight: bold;
-
   }
-
 `;
 
 

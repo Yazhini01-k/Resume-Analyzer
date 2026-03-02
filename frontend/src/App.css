@@ -149,6 +149,13 @@
     margin: 16px 8px !important;
   }
 }
-.ant-col {
-  min-width: 250px !important;
+/* Fix column shrinking only inside Resume Analysis card */
+.unified-resume-card .ant-col {
+  min-width: 350px;
+}
+
+/* Prevent weird word breaking */
+.unified-resume-card * {
+  word-break: normal;
+  overflow-wrap: normal;
 }

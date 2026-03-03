@@ -226,27 +226,37 @@ const CandidateDashboard = () => {
                         <Button 
                           type="link" 
                           icon={<RightOutlined />}
-                          onClick={() => navigate(`/candidate/jobs`)}
+                          onClick={() => navigate('/candidate/jobs')}
                         />
                       ]}
                     >
                       <List.Item.Meta
                         title={
                           <div>
-                            <Text strong>{item.job.title}</Text>
+                            <Text strong>{item.title}</Text>
                             <div style={{ marginTop: 4 }}>
-                              <Text type="secondary">{item.job.company} • {item.job.location}</Text>
+                              <Text type="secondary">
+                                {item.company} • {item.location}
+                              </Text>
                             </div>
                           </div>
                         }
                         description={
                           <div>
-                            <div className={`match-percentage ${item.match_score >= 70 ? 'high' : item.match_score >= 50 ? 'medium' : 'low'}`}>
-                              Match: {item.match_score.toFixed(1)}%
+                            <div style={{ 
+                              fontWeight: 600,
+                              color: item.match_percentage >= 70 
+                                ? '#52c41a' 
+                                : item.match_percentage >= 50 
+                                ? '#faad14' 
+                                : '#f5222d'
+                            }}>
+                              Match: {item.match_percentage?.toFixed(1)}%
                             </div>
-                            {item.job.required_skills && (
+
+                            {item.required_skills && (
                               <div style={{ marginTop: 4 }}>
-                                {item.job.required_skills.slice(0, 3).map((skill, index) => (
+                                {item.required_skills.slice(0, 3).map((skill, index) => (
                                   <Tag key={index} size="small">{skill}</Tag>
                                 ))}
                               </div>

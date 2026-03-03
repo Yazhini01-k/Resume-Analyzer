@@ -22,7 +22,7 @@ User = get_user_model()
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.AllowAny])
 def get_dynamic_recommendations(request):
     """
     Get dynamic job recommendations based on user's resume skills

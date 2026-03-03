@@ -56,7 +56,7 @@ class JobRecommendationEngine:
         for job in active_jobs:
             match_result = self._calculate_job_match(latest_resume, job, preferences)
             
-            if match_result['overall_score'] >= min_score:
+            if match_result['overall_score'] >= 0:
                 # Create or update JobMatch record
                 job_match, created = JobMatch.objects.get_or_create(
                     resume=latest_resume,

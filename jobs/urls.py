@@ -15,12 +15,12 @@ urlpatterns = [
     path('my-skills/', views.my_skills_summary, name='my-skills'),
     
     # Dynamic Recommendation API Endpoints
-    path('api/dynamic-recommendations/', recommendation_views.get_dynamic_recommendations, name='dynamic-recommendations'),
-    path('api/refresh-recommendations/', recommendation_views.refresh_recommendations, name='refresh-recommendations'),
-    path('api/recommendation/<int:match_id>/viewed/', recommendation_views.mark_recommendation_viewed, name='mark-recommendation-viewed'),
-    path('api/recommendation/<int:match_id>/save/', recommendation_views.save_recommendation, name='save-recommendation'),
-    path('api/recommendation-analytics/', recommendation_views.get_recommendation_analytics, name='recommendation-analytics'),
-    path('api/skill-analysis/', recommendation_views.get_skill_analysis, name='skill-analysis'),
-    path('api/job-market-insights/', recommendation_views.get_job_market_insights, name='job-market-insights'),
-    path('api/search-by-skills/', recommendation_views.search_jobs_by_skills, name='search-jobs-by-skills'),
+    path('dynamic-recommendations/', recommendation_views.get_dynamic_recommendations, name='dynamic-recommendations'),
+    path('refresh-recommendations/', recommendation_views.refresh_recommendations, name='refresh-recommendations'),
+    path('recommendation/<int:match_id>/viewed/', recommendation_views.mark_recommendation_viewed, name='mark-recommendation-viewed'),
+    path('recommendation/<int:match_id>/save/', recommendation_views.save_recommendation, name='save-recommendation'),
+    path('recommendation-analytics/', recommendation_views.get_recommendation_analytics, name='recommendation-analytics'),
+    path('skill-analysis/', recommendation_views.get_skill_analysis, name='skill-analysis'),
+    path('job-market-insights/', recommendation_views.get_job_market_insights, name='job-market-insights'),
+    path('search-by-skills/', recommendation_views.search_jobs_by_skills, name='search-jobs-by-skills'),
 ]

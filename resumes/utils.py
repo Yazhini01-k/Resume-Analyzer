@@ -95,7 +95,7 @@ class ResumeParser:
             'android', 'ios', 'react native', 'flutter', 'xamarin',
 
             # Databases
-            'mysql', 'postgresql', 'mongodb', 'sqlite', 'oracle',
+            'mysql', 'postgresql', 'sql', 'mongodb', 'sqlite', 'oracle',
             'redis', 'firebase', 'cassandra', 'dynamodb',
 
             # Cloud Platforms
@@ -399,3 +399,10 @@ class FeatureVectorizer:
         if not self.is_fitted:
             raise ValueError("Vectorizer must be fitted first")
         return self.vectorizer.get_feature_names_out().tolist()
+
+def find_skill_gap(resume_skills, job_skills):
+    resume_set = set(skill.lower() for skill in resume_skills)
+    job_set = set(skill.lower() for skill in job_skills)
+
+    gap = job_set - resume_set
+    return list(gap)

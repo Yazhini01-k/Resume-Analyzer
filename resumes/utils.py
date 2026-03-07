@@ -321,28 +321,7 @@ class ResumeParser:
         
         return list(set(certificates))
     
-    def _extract_achievements(self, text):
-        """Extract achievement information from resume"""
-        achievements = []
-        text_lower = text.lower()
-        
-        # Achievement patterns
-        achievement_patterns = [
-            r'[-•*]\s*([^.!?]*?(?:achieved|awarded|recognized|honor|award|trophy)[^.!?]*?[a-zA-Z][^.!?]*)',
-            r'[-•*]\s*([^.!?]*?(?:promotion|increased|improved|optimized|reduced)[^.!?]*?[a-zA-Z][^.!?]*)',
-            r'[-•*]\s*([^.!?]*?(?:saved|generated|led|managed|won|success)[^.!?]*?[a-zA-Z][^.!?]*)',
-            r'([^.!?]*?\d+%[^.!?]*?(?:increase|decrease|improvement|reduction)[^.!?]*)',
-            r'([^.!?]*?\$?\d+(?:,\d{3})*(?:\.\d{2})?[^.!?]*?(?:saved|generated|revenue|profit|cost)[^.!?]*)',
-            r'([^.!?]*?(?:first|top|best|excellent|outstanding)[^.!?]*?[a-zA-Z][^.!?]*)'
-        ]
-        
-        for pattern in achievement_patterns:
-            matches = re.findall(pattern, text_lower, re.IGNORECASE)
-            for match in matches:
-                if len(match.strip()) > 8:  # Filter out very short matches
-                    achievements.append(match.strip())
-        
-        return list(set(achievements))
+    
     def _extract_contact_info(self, text):
         """Extract contact information"""
         contact_info = {}

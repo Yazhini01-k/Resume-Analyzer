@@ -4,7 +4,6 @@ import { Layout, Menu, Avatar, Dropdown, Space } from 'antd';
 import { UserOutlined, LogoutOutlined, DashboardOutlined, 
          FileTextOutlined, BulbOutlined, TeamOutlined } from '@ant-design/icons';
 import { useAuth } from './hooks/useAuth';
-import Home from './Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import CandidateDashboard from './pages/candidate/Dashboard';
@@ -25,10 +24,9 @@ function App() {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
   }
@@ -121,8 +119,6 @@ function App() {
                 case 'candidates':
                   navigate('/hr/candidate-ranking');
                   break;
-                default:
-                  break;
               }
             } else {
               switch(key) {
@@ -137,8 +133,6 @@ function App() {
                   break;
                 case 'skills':
                   navigate('/candidate/skills');
-                  break;
-                default:
                   break;
               }
             }

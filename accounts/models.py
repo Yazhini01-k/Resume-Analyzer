@@ -29,6 +29,7 @@ class User(AbstractUser):
         if self.is_superuser:
             self.role = 'admin'
         super().save(*args, **kwargs)
+        
     @property
     def is_candidate(self):
         return self.role == 'candidate'

@@ -9,6 +9,7 @@ class User(AbstractUser):
     ROLE_CHOICES = [
         ('candidate', 'Candidate'),
         ('hr', 'HR/Recruiter'),
+        ('admin', 'Admin'),
     ]
     
     email = models.EmailField(unique=True)
@@ -22,11 +23,12 @@ class User(AbstractUser):
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
 
     def __str__(self):
-        return self.username
-    
-    def __str__(self):
         return f"{self.email} ({self.role})"
     
+    def save(self, *args, **kwargs):
+        if self.is_superuser:
+            self.role = 'admin'
+        super().save(*args, **kwargs)
     @property
     def is_candidate(self):
         return self.role == 'candidate'

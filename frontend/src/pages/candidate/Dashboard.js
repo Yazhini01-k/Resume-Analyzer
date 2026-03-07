@@ -85,7 +85,7 @@ const CandidateDashboard = () => {
   const recentApplications = Array.isArray(applications) ? applications?.slice(0, 5) : [];
 
   return (
-    <div>
+    <div style={{ padding: "30px", background: "#f5f7fa", minHeight: "100vh" }}>
       <div className="page-header">
         <Title level={2}>Candidate Dashboard</Title>
         <Text type="secondary">

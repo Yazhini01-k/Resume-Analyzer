@@ -119,8 +119,6 @@ function App() {
                 case 'candidates':
                   navigate('/hr/candidate-ranking');
                   break;
-                default:
-                  navigate('/hr/dashboard');
               }
             } else {
               switch(key) {
@@ -136,8 +134,6 @@ function App() {
                 case 'skills':
                   navigate('/candidate/skills');
                   break;
-                default:
-                  navigate('/candidate/dashboard');
               }
             }
           }}

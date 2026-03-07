@@ -1,5 +1,5 @@
 """
-Dynamic Job Recommendation Engine
+Dynamic Job Recommendation Engine with ML Integration
 Handles real-time job recommendations based on resume skills and job requirements
 """
 
@@ -11,6 +11,14 @@ from collections import defaultdict
 import math
 
 User = get_user_model()
+
+# Import ML JobMatcher for comprehensive scoring
+try:
+    from ml_engine.ml_algorithms import JobMatcher
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    print("Warning: ML JobMatcher not available, using basic scoring")
 
 
 class JobRecommendationEngine:
@@ -66,6 +74,7 @@ class JobRecommendationEngine:
                         'overall_score': match_result['overall_score'],
                         'skills_match_score': match_result['skills_score'],
                         'experience_match_score': match_result['experience_score'],
+                        'education_match_score': match_result['education_score'],  # ✅ Added
                         'location_match_score': match_result['location_score'],
                         'salary_match_score': match_result['salary_score'],
                         'matched_skills': match_result['matched_skills'],
@@ -82,6 +91,7 @@ class JobRecommendationEngine:
                     job_match.overall_score = match_result['overall_score']
                     job_match.skills_match_score = match_result['skills_score']
                     job_match.experience_match_score = match_result['experience_score']
+                    job_match.education_match_score = match_result['education_score']  # ✅ Added
                     job_match.location_match_score = match_result['location_score']
                     job_match.salary_match_score = match_result['salary_score']
                     job_match.matched_skills = match_result['matched_skills']
@@ -109,8 +119,57 @@ class JobRecommendationEngine:
     
     def _calculate_job_match(self, resume, job, user_preferences):
         """
-        Calculate detailed match score between resume and job
+        Calculate detailed match score between resume and job using ML algorithms
         """
+        # Use ML JobMatcher if available for comprehensive scoring
+        if ML_AVAILABLE:
+            try:
+                job_matcher = JobMatcher()
+                
+                # Prepare resume data
+                resume_data = {
+                    'skills': resume.extracted_skills or [],
+                    'experience': resume.extracted_experience or [],
+                    'education': resume.extracted_education or [],
+                    'processed_text': f"{resume.extracted_text or ''}"
+                }
+                
+                # Prepare job data
+                job_data = {
+                    'title': job.title,
+                    'company': job.company,
+                    'location': job.location,
+                    'description': job.description,
+                    'requirements': job.requirements or '',
+                    'responsibilities': job.responsibilities or '',
+                    'salary_range': job.salary_range,
+                    'job_type': job.job_type,
+                    'experience_level': job.experience_level,
+                    'required_skills': job.required_skills or [],
+                    'preferred_skills': job.preferred_skills or []
+                }
+                
+                # Calculate comprehensive match using ML algorithms
+                match_result = job_matcher.calculate_comprehensive_match(resume_data, job_data)
+                
+                return {
+                    'overall_score': round(match_result['overall_score'], 2),
+                    'skills_score': round(match_result['skills_score'], 2),
+                    'experience_score': round(match_result['experience_score'], 2),
+                    'education_score': round(match_result['education_score'], 2),
+                    'location_score': 0.0,  # Not calculated in ML version
+                    'salary_score': 0.0,  # Not calculated in ML version
+                    'matched_skills': match_result['matched_skills'],
+                    'missing_skills': match_result['missing_skills'],
+                    'skill_details': match_result['skill_gap_analysis'],
+                    'reason': match_result['match_explanation'],
+                    'confidence': round(match_result.get('confidence_level', 0.0), 2)
+                }
+                
+            except Exception as e:
+                print(f"ML matching failed, falling back to basic scoring: {e}")
+        
+        # Fallback to basic scoring if ML is not available
         # Skills matching (60% weight)
         skills_score, matched_skills, missing_skills, skill_details = self._calculate_skills_match(
             resume.extracted_skills, job.required_skills, job.preferred_skills
@@ -155,6 +214,7 @@ class JobRecommendationEngine:
             'overall_score': round(overall_score, 2),
             'skills_score': round(skills_score, 2),
             'experience_score': round(experience_score, 2),
+            'education_score': 0.0,  # Not calculated in basic version
             'location_score': round(location_score, 2),
             'salary_score': round(salary_score, 2),
             'matched_skills': matched_skills,

@@ -237,14 +237,37 @@ class JobMatcher:
             job_data.get('description', '') + ' ' + job_data.get('requirements', '')
         )
         
-        # Calculate weighted overall score
-        overall_score = (
-            skills_result['score'] * self.skill_weight +
-            experience_result['score'] * self.experience_weight +
-            education_result['score'] * self.education_weight +
-            semantic_result['score'] * self.semantic_weight
-        )
-        
+        # Calculate weighted overall score with dynamic weights for freshers
+        if experience_result['score'] > 0:
+            # Resume has experience - use normal formula
+            overall_score = (
+                skills_result['score'] * 0.40 +
+                experience_result['score'] * 0.30 +
+                education_result['score'] * 0.20 +
+                semantic_result['score'] * 0.10
+            )
+            weights_used = {
+                'skills': 0.40,
+                'experience': 0.30,
+                'education': 0.20,
+                'semantic': 0.10
+            }
+            has_experience = True
+        else:
+            # Resume has no experience (fresher) - redistribute weights
+            overall_score = (
+                skills_result['score'] * 0.50 +
+                education_result['score'] * 0.30 +
+                semantic_result['score'] * 0.20
+            )
+            weights_used = {
+                'skills': 0.50,
+                'experience': 0.00,
+                'education': 0.30,
+                'semantic': 0.20
+            }
+            has_experience = False
+    
         # Generate match explanation
         match_explanation = self._generate_match_explanation(
             skills_result, experience_result, education_result, semantic_result
@@ -263,7 +286,9 @@ class JobMatcher:
             'additional_skills': skills_result['additional_skills'],
             'skill_gap_analysis': skills_result['gap_analysis'],
             'match_explanation': match_explanation,
-            'processing_time_ms': processing_time
+            'processing_time_ms': processing_time,
+            'weights_used': weights_used,
+            'has_experience': has_experience
         }
     
     def _calculate_skills_match(self, resume_skills: List[str], 
@@ -295,7 +320,17 @@ class JobMatcher:
         if preferred_skills:
             preferred_score = (len(matched_preferred) / len(preferred_skills)) * 100
         else:
-            preferred_score = 100  # No preferred skills means full score
+            # Use standard preferred skills when job has no preferred skills
+            standard_preferred_skills = [
+                'docker', 'aws', 'azure', 'gcp', 'git', 'mysql', 'postgresql', 
+                'redis', 'mongodb', 'api', 'rest', 'graphql', 'linux', 'nginx',
+                'typescript', 'sass', 'webpack', 'testing', 'ci/cd'
+            ]
+            standard_preferred_lower = [skill.lower() for skill in standard_preferred_skills]
+            matched_standard = [skill for skill in resume_skills_lower if skill in standard_preferred_lower]
+            preferred_score = (len(matched_standard) / len(standard_preferred_skills)) * 100
+            # Set matched_preferred for gap analysis
+            matched_preferred = matched_standard
         
         # Overall skills score (70% required, 30% preferred)
         overall_score = (required_score * 0.7) + (preferred_score * 0.3)

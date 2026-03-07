@@ -78,11 +78,17 @@ def get_dynamic_recommendations(request):
                 'external_url': rec['job'].external_url,
                 'company_logo': rec['job'].company_logo.url if rec['job'].company_logo else None,
                 
-                # Match information
-                'match_percentage': rec['match_percentage'],
-                'matched_skills': rec['matched_skills'],
-                'missing_skills': rec['missing_skills'],
-                'match_reason': rec['reason'],
+                # Match information - include all score breakdowns from ML engine
+                'match_percentage': rec['match'].overall_score,
+                'overall_score': rec['match'].overall_score,
+                'skills_match_score': rec['match'].skills_match_score,
+                'experience_match_score': rec['match'].experience_match_score,
+                'education_match_score': rec['match'].education_match_score,
+                'location_match_score': rec['match'].location_match_score,
+                'salary_match_score': rec['match'].salary_match_score,
+                'matched_skills': rec['match'].matched_skills,
+                'missing_skills': rec['match'].missing_skills,
+                'match_reason': rec['match'].match_reason,
                 'match_id': rec['match'].id,
                 'is_viewed': rec['match'].is_viewed,
                 'is_applied': rec['match'].is_applied,

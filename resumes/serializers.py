@@ -47,10 +47,25 @@ class ResumeAnalysisSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ResumeAnalysis
-        fields = ['resume', 'completeness_score', 'skills_score', 'experience_score',
-                 'education_score', 'overall_score', 'missing_skills', 
-                 'improvement_suggestions', 'skill_gaps', 'word_count', 
-                 'sentence_count', 'readability_score', 'created_at', 'updated_at']
+        fields = [
+            'resume',
+            'overall_score',
+            'basic_score',
+            'skills_score',
+            'experience_score',
+            'education_score',
+            'projects_score',
+            'structure_score',
+            'completeness_score',
+            'missing_skills',
+            'skill_gaps',
+            'word_count',
+            'sentence_count',
+            'readability_score',
+            'feedback',   # ⭐ VERY IMPORTANT
+            'created_at',
+            'updated_at'
+        ]
         read_only_fields = ['resume', 'created_at', 'updated_at']
 
 

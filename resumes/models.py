@@ -194,12 +194,20 @@ class ResumeAnalysis(models.Model):
     skills_score = models.FloatField(default=0.0)  # 0-100
     experience_score = models.FloatField(default=0.0)  # 0-100
     education_score = models.FloatField(default=0.0)  # 0-100
+
+    basic_score = models.FloatField(default=0)
+    projects_score = models.FloatField(default=0)
+    structure_score = models.FloatField(default=0)
+
     overall_score = models.FloatField(default=0.0)  # 0-100
     
     # Recommendations
     missing_skills = models.JSONField(default=list, blank=True)
-    improvement_suggestions = models.JSONField(default=list, blank=True)
     skill_gaps = models.JSONField(default=dict, blank=True)
+
+
+    # NEW: Score explanation feedback
+    feedback = models.JSONField(default=list, blank=True)
     
     # Analysis details
     word_count = models.IntegerField(default=0)

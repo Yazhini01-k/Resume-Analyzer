@@ -521,9 +521,9 @@ const ResumeUpload = () => {
 
                                      {Array.from(
                                         new Set(
-                                          latestResume.extracted_skills.map(skill =>
-                                            skill.trim().toLowerCase()
-                                          )
+                                           latestResume.extracted_skills
+                                              .filter(skill => typeof skill === "string" && skill.trim() !== "")
+                                              .map(skill => skill.trim().toLowerCase())
                                         )
                                       ).map((skill, index) => (
                                         <div key={index} style={{ 
@@ -536,7 +536,7 @@ const ResumeUpload = () => {
                                           border: '1px solid #b7eb8f'
                                         }}>
                                           <Text style={{ fontSize: '14px', fontWeight: '500' }}>
-                                            {skill.charAt(0).toUpperCase() + skill.slice(1)}
+                                            {skill ? skill.charAt(0).toUpperCase() + skill.slice(1) : ""}
                                           </Text>
                                           <Tag color="green" size="small" style={{ fontWeight: 'bold' }}>85%</Tag>
                                         </div>
@@ -1415,6 +1415,30 @@ const ResumeUpload = () => {
                 </Col>
 
               </Row>
+            )}
+              
+           {/* Improvement Feedback */}
+              {selectedResume.analysis?.feedback && selectedResume.analysis.feedback.length > 0 && (
+                <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+                  <Col xs={24}>
+                    <Card title="How to Improve Your Resume" size="small">
+                      {selectedResume.analysis.feedback.map((item, index) => (
+                        <div
+                          key={index}
+                          style={{
+                            background: "#fff3cd",
+                            padding: "12px",
+                            borderRadius: "6px",
+                            marginBottom: "10px"
+                          }}
+                        >
+                          <strong>{item.reason}</strong>
+                          <p style={{ margin: 0 }}>{item.suggestion}</p>
+                        </div>
+                      ))}
+                    </Card>
+                  </Col>
+                </Row>
 
             )}
 

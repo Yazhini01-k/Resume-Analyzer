@@ -131,7 +131,7 @@ class JobRecommendationEngine:
                     'skills': resume.extracted_skills or [],
                     'experience': resume.extracted_experience or [],
                     'education': resume.extracted_education or [],
-                    'processed_text': f"{resume.extracted_text or ''}"
+                    'processed_text': f"{resume.processed_text or ''}"
                 }
                 
                 # Prepare job data

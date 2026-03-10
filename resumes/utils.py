@@ -218,80 +218,159 @@ class ResumeParser:
 
         return unique_skills
     
+
     def _extract_education(self, text):
-        """Extract education information"""
         education = []
-        text_lower = text.lower()
-        
-        # Look for education patterns
-        education_patterns = [
-            r'(bachelor|master|phd|doctorate|b\.tech|m\.tech|b\.sc|m\.sc|mba).*?(\d{4})',
-            r'(university|college|institute).*?(bachelor|master|phd|degree)',
-            r'(engineering|computer science|information technology).*?(degree|bachelor|master)'
-        ]
-        
-        for pattern in education_patterns:
-            matches = re.findall(pattern, text_lower, re.IGNORECASE)
-            for match in matches:
-                if isinstance(match, tuple):
-                    education.append(' '.join(match))
-                else:
-                    education.append(match)
-        
-        return list(set(education))
-    
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+
+        # 1. Section Boundaries
+        start_headers = ["education", "academic background", "academic profile"]
+        end_headers = ["experience", "skills", "projects", "certifications", "additional"]
+
+        # 2. Strict Degree Regex 
+        # This looks for common degree prefixes or full names
+        degree_pattern = r"(?i)\b(B\.E|BE|B\.Tech|M\.Tech|B\.Sc|M\.Sc|Bachelor|Master|MBA|PHD|SSLC|HSC)\b"
+
+        is_in_section = False
+        section_lines = []
+
+        # Step A: Isolate the Education Section
+        for line in lines:
+            line_lower = line.lower()
+            if any(line_lower == h or line_lower == h + ":" for h in start_headers):
+                is_in_section = True
+                continue
+            if is_in_section:
+                if any(line_lower == h or line_lower == h + ":" for h in end_headers):
+                    break
+                section_lines.append(line)
+
+        # Step B: Extract Degrees from the isolated section
+        for line in section_lines:
+            # Ignore contact info just in case
+            if any(x in line.lower() for x in ["@", "+91", "linkedin"]):
+                continue
+
+            # Check for the degree pattern
+            if re.search(degree_pattern, line):
+                # Clean the line: if it contains a comma (like "University, Degree"), 
+                # we try to extract just the degree part.
+                parts = re.split(r'[,|]', line)
+                degree_found = line # Default
+                
+                for part in parts:
+                    if re.search(degree_pattern, part):
+                        degree_found = part.strip()
+                        break
+
+                education.append({
+                    "degree": degree_found,
+                    "institution": "",
+                    "year": ""
+                })
+
+        # Step C: Deduplicate
+        unique = []
+        seen = set()
+        for edu in education:
+            if edu["degree"].lower() not in seen:
+                unique.append(edu)
+                seen.add(edu["degree"].lower())
+
+        return unique
     def _extract_experience(self, text):
-        """Extract work experience information"""
         experience = []
+        # Split text into lines and remove empty ones
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+
+        # 1. Flexible Section Detection
+        # Matches "Experience", "WORK HISTORY", "Professional Experience:", etc.
+        start_headers = r"^(experience|work|employment|history|professional|career|background)"
+        # Matches common following sections to know when to stop
+        end_headers = r"^(education|skills|projects|certifications|technologies|additionals|languages|summary|objective)"
         
-        # Look for experience patterns
-        experience_patterns = [
-            r'(\d+).*?years?.*?experience',
-            r'(\w+\s+\w{2,}\s+\w+).*?(\d{4}\s*-\s*\d{4}|\d{4}\s*-\s*present)',
-            r'(senior|junior|lead|principal|manager).*?(developer|engineer|analyst|designer)'
-        ]
-        
-        for pattern in experience_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            for match in matches:
-                if isinstance(match, tuple):
-                    experience.append(' '.join(match))
-                else:
-                    experience.append(match)
-        
-        return list(set(experience))
-    
+        # 2. Universal Date Regex
+        # This covers: June 2024, Jun 2024, 06/2024, 2024-2026, Present, etc.
+        date_regex = r"((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Present|Current|\d{1,2}/\d{2,4}|\b\d{4}\b))"
+
+        is_in_section = False
+        section_lines = []
+
+        # Step A: Collect everything between the 'Experience' and 'Education/Skills' headers
+        for line in lines:
+            clean_line = line.strip().lower()
+            
+            if re.search(start_headers, clean_line):
+                is_in_section = True
+                continue
+                
+            if is_in_section:
+                if re.search(end_headers, clean_line):
+                    break
+                section_lines.append(line)
+
+        # Step B: Scan the section for job entries using dates as anchors
+        for i, line in enumerate(section_lines):
+            # Look for a date in the current line
+            date_matches = re.findall(date_regex, line, re.IGNORECASE)
+            
+            if date_matches:
+                # We found a date! Now we need to find the title.
+                # Usually, the title is on the same line as the date, or 1-2 lines ABOVE it.
+                duration = " - ".join(date_matches)
+                
+                # Logic to find the Position Title:
+                # 1. Check if there's text on the same line before the date
+                title = line.split(date_matches[0])[0].strip()
+                
+                # 2. If same-line text is empty/too short, look at the line ABOVE
+                if len(title) < 3 and i > 0:
+                    title = section_lines[i-1]
+                
+                # 3. Clean up the title (remove bullets, company names, or locations)
+                title = re.sub(r"^[•\-\*]\s*", "", title) # Remove bullets
+                title = title.split("-")[0].split("|")[0].strip() # Remove " - Location"
+
+                if title:
+                    experience.append({
+                        "position": title,
+                        "duration": duration
+                    })
+
+        # Deduplicate entries
+        unique_exp = []
+        seen = set()
+        for exp in experience:
+            if exp["position"].lower() not in seen:
+                unique_exp.append(exp)
+                seen.add(exp["position"].lower())
+
+        return unique_exp
     def _extract_projects(self, text):
         """Extract project information from resume"""
+
         projects = []
         text_lower = text.lower()
-        
-        # Project section patterns
-        project_section_patterns = [
-            r'projects[:\s]*(.*?)(?:experience|education|skills|$)',
-            r'personal projects[:\s]*(.*?)(?:experience|education|skills|$)',
-            r'academic projects[:\s]*(.*?)(?:experience|education|skills|$)'
-        ]
-        
-        # Extract project sections
-        for pattern in project_section_patterns:
-            matches = re.findall(pattern, text_lower, re.IGNORECASE | re.DOTALL)
-            for match in matches:
-                projects.append(match.strip())
-        
-        # Individual project patterns
-        project_patterns = [
-            r'[-•*]\s*([^.!?]*?[a-zA-Z][^.!?]*?(?:project|app|system|platform|tool|application)[^.!?]*)',
-            r'([^.!?]*?(?:developed|built|created|designed|implemented|launched)[^.!?]*?[a-zA-Z][^.!?]*)',
-            r'([^.!?]*?(?:website|web app|mobile app|software|database)[^.!?]*?[a-zA-Z][^.!?]*)'
-        ]
-        
-        for pattern in project_patterns:
-            matches = re.findall(pattern, text_lower, re.IGNORECASE)
-            for match in matches:
-                if len(match.strip()) > 10:  # Filter out very short matches
-                    projects.append(match.strip())
-        
+
+        # Find the project section
+        project_section_match = re.search(
+            r'(projects?|academic projects?|personal projects?)[:\s]*(.*?)(skills|education|experience|certifications|$)',
+            text_lower,
+            re.DOTALL
+        )
+
+        if project_section_match:
+            project_section = project_section_match.group(2)
+
+            # Split by bullet points or new lines
+            lines = re.split(r'[\n•\-]', project_section)
+
+            for line in lines:
+                cleaned = line.strip()
+
+                if len(cleaned) > 15:
+                    projects.append(cleaned)
+
         return list(set(projects))
     
     def _extract_certificates(self, text):
@@ -346,6 +425,14 @@ class ResumeParser:
     def _extract_contact_info(self, text):
         """Extract contact information"""
         contact_info = {}
+
+        lines = text.split("\n")
+        # Assume first line is name
+        if lines:
+            possible_name = lines[0].strip()
+
+            if len(possible_name.split()) <= 4:
+                contact_info['name'] = possible_name
         
         # Email
         email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
@@ -354,7 +441,7 @@ class ResumeParser:
             contact_info['email'] = emails[0]
         
         # Phone
-        phone_pattern = r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
+        phone_pattern = r'\+?\d[\d\s\-]{8,15}'
         phones = re.findall(phone_pattern, text)
         if phones:
             contact_info['phone'] = phones[0]

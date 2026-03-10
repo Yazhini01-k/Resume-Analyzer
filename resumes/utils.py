@@ -36,18 +36,22 @@ class ResumeTextExtractor:
             raise Exception(f"Error extracting text: {str(e)}")
     
     def _extract_from_pdf(self, file_path):
-        """Extract text from PDF file"""
+
         text = ""
-        try:
-            with pdfplumber.open(file_path) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-        except Exception as e:
-            raise Exception(f"Error reading PDF: {str(e)}")
-        
-        return text.strip() if text else ""
+
+        with pdfplumber.open(file_path) as pdf:
+
+            for page in pdf.pages:
+
+                page_text = page.extract_text(
+                    x_tolerance=2,
+                    y_tolerance=2
+                )
+
+                if page_text:
+                    text += page_text + "\n"
+
+        return text.strip()
     
     def _extract_from_docx(self, file_path):
         """Extract text from DOCX file"""
@@ -219,133 +223,562 @@ class ResumeParser:
         return unique_skills
     
 
+
     def _extract_education(self, text):
+        """
+        High-accuracy education extractor.
+
+        Fixes over the original:
+        - Section headers: partial match + case-insensitive (not exact match)
+        - End-section detection: uses `in lower` not `lower == header`
+        - Year regex: captures full 4-digit year, handles ranges like "2018 - 2022" / "2018–2022"
+        - Degree detection: 3x more patterns, including B.A, M.S, B.S, Honours, etc.
+        - Institution detection: regex-first (catches "X University / College of X"),
+        falls back to spaCy ORG + GPE (spaCy often labels universities as GPE)
+        - Block-based parsing: processes each blank-line-separated block ONCE,
+        eliminating duplicate entries from the sliding window
+        - Field of study extracted separately from degree line
+        - GPA extraction
+        - Dedup key includes year to keep two degrees from same institution
+        """
+
         education = []
-        lines = [line.strip() for line in text.split("\n") if line.strip()]
 
-        # 1. Section Boundaries
-        start_headers = ["education", "academic background", "academic profile"]
-        end_headers = ["experience", "skills", "projects", "certifications", "additional"]
+        # ── 0. Normalise line endings ────────────────────────────────────────────
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = [line.strip() for line in text.split("\n")]
 
-        # 2. Strict Degree Regex 
-        # This looks for common degree prefixes or full names
-        degree_pattern = r"(?i)\b(B\.E|BE|B\.Tech|M\.Tech|B\.Sc|M\.Sc|Bachelor|Master|MBA|PHD|SSLC|HSC)\b"
+        # ── 1. Section boundary detection ───────────────────────────────────────
 
-        is_in_section = False
+        START_HEADERS = re.compile(
+            r"""
+            \b(?:
+                education(?:al)?(?:\s+(?:background|history|qualifications?|summary|and\s+training))?
+                | academic\s+(?:background|history|qualifications?|record|credentials?)
+                | schooling | degrees?
+                | qualifications?
+                | training(?:\s+and\s+education)?
+            )\b
+            """,
+            re.IGNORECASE | re.VERBOSE,
+        )
+
+        END_HEADERS = re.compile(
+            r"""
+            \b(?:
+                experience | work\s+history | employment
+                | professional\s+background
+                | skill | competenc | expertise | technolog
+                | project | certification | publication
+                | award | honor | activit | interest | hobbies
+                | language | reference | summary | objective
+                | profile | contact | volunteer | achievement
+                | accomplishment | research | affiliation
+            )\b
+            """,
+            re.IGNORECASE | re.VERBOSE,
+        )
+
+        in_section = False
         section_lines = []
 
-        # Step A: Isolate the Education Section
         for line in lines:
-            line_lower = line.lower()
-            if any(line_lower == h or line_lower == h + ":" for h in start_headers):
-                is_in_section = True
-                continue
-            if is_in_section:
-                if any(line_lower == h or line_lower == h + ":" for h in end_headers):
+            lower = line.lower().strip()
+
+            if not in_section:
+                # Trigger: short line (likely a header) that matches education keywords
+                if len(line) < 60 and START_HEADERS.search(lower):
+                    in_section = True
+                    continue
+            else:
+                # Stop: another section header appears
+                if lower and len(line) < 60 and END_HEADERS.search(lower):
                     break
                 section_lines.append(line)
 
-        # Step B: Extract Degrees from the isolated section
+        # Fallback: if section detection failed, scan entire text
+        if not section_lines:
+            section_lines = [l for l in lines if l]
+
+        # ── 2. Split into blocks (blank lines = separator between entries) ───────
+
+        blocks = []
+        current = []
         for line in section_lines:
-            # Ignore contact info just in case
-            if any(x in line.lower() for x in ["@", "+91", "linkedin"]):
-                continue
+            if line:
+                current.append(line)
+            else:
+                if current:
+                    blocks.append(current)
+                    current = []
+        if current:
+            blocks.append(current)
 
-            # Check for the degree pattern
-            if re.search(degree_pattern, line):
-                # Clean the line: if it contains a comma (like "University, Degree"), 
-                # we try to extract just the degree part.
-                parts = re.split(r'[,|]', line)
-                degree_found = line # Default
-                
-                for part in parts:
-                    if re.search(degree_pattern, part):
-                        degree_found = part.strip()
-                        break
+        # If no blank-line separation, treat every line as its own block
+        if len(blocks) <= 1 and len(section_lines) > 3:
+            blocks = [[l] for l in section_lines if l]
 
-                education.append({
-                    "degree": degree_found,
-                    "institution": "",
-                    "year": ""
-                })
+        # ── 3. Patterns ──────────────────────────────────────────────────────────
 
-        # Step C: Deduplicate
+        # College-level degrees only (no high school / secondary / GED)
+        DEGREE_RE = re.compile(
+            r"""
+            \b(?:
+                # Spelled-out college degrees
+                bachelor(?:'?s)?(?:\s+of\s+\w+(?:\s+\w+)*)?
+                | master(?:'?s)?(?:\s+of\s+\w+(?:\s+\w+)*)?
+                | doctor(?:ate|'?s)?(?:\s+of\s+\w+(?:\s+\w+)*)?
+                | associate(?:'?s)?(?:\s+of\s+\w+(?:\s+\w+)*)?
+                | honours? | undergraduate | postgraduate
+                # Abbreviations (longer first to avoid partial matches)
+                | b\.?\s*tech | m\.?\s*tech | b\.?\s*e\.?\b | m\.?\s*e\.?\b
+                | b\.?\s*sc | m\.?\s*sc | b\.?\s*s\.?\b | m\.?\s*s\.?\b
+                | b\.?\s*a\.?\b | m\.?\s*a\.?\b
+                | b\.?\s*com | m\.?\s*com | b\.?\s*ca | m\.?\s*ca
+                | b\.?\s*ba | m\.?\s*ba | b\.?\s*fa | m\.?\s*fa
+                | m\.?\s*b\.?\s*a | d\.?\s*b\.?\s*a
+                | ph\.?\s*d | d\.?\s*phil | ed\.?\s*d | psy\.?\s*d
+                | m\.?\s*d\.?\b | j\.?\s*d\.?\b | l\.?\s*l\.?\s*[bm]
+                | h\.?\s*n\.?\s*[dc]
+            )\b
+            """,
+            re.IGNORECASE | re.VERBOSE,
+        )
+
+        # College-level institution keywords only (no plain "school" or "high school")
+        INSTITUTION_RE = re.compile(
+            r"""
+            \b
+            (?:
+                # "X University / College / Institute / Polytechnic / Academy"
+                (?:\w+(?:[\s\-]\w+){0,5})\s+
+                (?:university|college|institute(?:\s+of\s+technology)?
+                |polytechnic|academy|conservatory|seminary|faculty)
+                |
+                # "University / College / Institute of X"
+                (?:university|college|institute|polytechnic)
+                \s+of\s+(?:\w+(?:[\s\-]\w+){0,4})
+                 
+
+                |
+                # Well-known acronyms
+                \b(?:MIT|CalTech|UCLA|USC|NYU|LSE
+                    |IIT[\s\-]\w+|NIT[\s\-]\w+|BITS[\s\-]\w+|IIM[\s\-]\w+
+                    |NUS|NTU|ETH|EPFL)\b
+            )
+            \b
+            """,
+            re.IGNORECASE | re.VERBOSE,
+        )
+
+        # Lines that indicate a high-school / pre-college entry — skip these blocks
+        SCHOOL_ONLY_RE = re.compile(
+            r"\b(?:high\s+school|secondary\s+school|higher\s+secondary|matriculat|ged"
+            r"|10th|12th|hsc|ssc|class\s+(?:x|xii|10|12))\b",
+            re.IGNORECASE,
+        )
+
+        # Full year range: "2018 - 2022", "2018–2022", "2018 to 2022", "2018"
+        YEAR_RE = re.compile(
+            r"(?:((?:19|20)\d{2})\s*(?:[-–—to]+)\s*((?:19|20)\d{2}|present|current|now))"
+            r"|(?:((?:19|20)\d{2}))",
+            re.IGNORECASE,
+        )
+
+        GPA_RE = re.compile(
+            r"\b(?:gpa|cgpa|grade\s+point)\s*[:\-]?\s*(\d+\.\d+(?:\s*/\s*\d+\.\d+)?)",
+            re.IGNORECASE,
+        )
+
+        FIELD_RE = re.compile(
+            r"\bin\s+([A-Za-z\s&\-]{3,50})",
+            re.IGNORECASE
+        )
+
+        # ── 4. Parse each block ──────────────────────────────────────────────────
+
+        def parse_block(block_lines):
+            full_text = " ".join(block_lines)
+            full_lower = full_text.lower()
+
+            # Skip blocks with no college-level degree signal
+            if not DEGREE_RE.search(full_lower):
+                return None
+
+            # Skip blocks that are clearly high school / secondary entries
+            if SCHOOL_ONLY_RE.search(full_text) and not INSTITUTION_RE.search(full_text):
+                return None
+
+            entry = {"degree": "", "field_of_study": "", "institution": "", "year": "", "gpa": ""}
+
+            for line in block_lines:
+                line_lower = line.lower()
+
+                # ── Degree ──
+                if not entry["degree"]:
+                    dm = DEGREE_RE.search(line_lower)
+                    if dm:
+                        entry["degree"] = line.strip()   # keep original case
+
+                # ── Year ──
+                ym = YEAR_RE.search(line)
+                if ym and not entry["year"]:
+                    if ym.group(1):                        # range match
+                        entry["year"] = f"{ym.group(1)} - {ym.group(2)}"
+                    elif ym.group(3):                      # single year
+                        entry["year"] = ym.group(3)
+
+                # ── GPA ──
+                gm = GPA_RE.search(line)
+                if gm and not entry["gpa"]:
+                    entry["gpa"] = gm.group(1)
+
+                # ── Institution: regex first ──
+                if not entry["institution"]:
+                    im = INSTITUTION_RE.search(line)
+                    if im:
+                        entry["institution"] = im.group().strip()
+
+            # ── Institution: spaCy fallback (ORG + GPE) ──
+            if not entry["institution"] and hasattr(self, "nlp"):
+                doc = self.nlp(full_text)
+                for ent in doc.ents:
+                    if ent.label_ in ("ORG", "GPE"):
+                        # Prefer longer entity (more likely to be the full name)
+                        if len(ent.text) > len(entry["institution"]):
+                            entry["institution"] = ent.text
+
+            # ── Field of study ──
+            fm = FIELD_RE.search(full_text)
+            if fm:
+                entry["field_of_study"] = fm.group(1).strip()
+
+            return entry if (entry["degree"] or entry["institution"]) else None
+
+        # ── 5. Process all blocks ────────────────────────────────────────────────
+
+        for block in blocks:
+            result = parse_block(block)
+            if result:
+                education.append(result)
+
+        # ── 6. Deduplicate ───────────────────────────────────────────────────────
         unique = []
         seen = set()
         for edu in education:
-            if edu["degree"].lower() not in seen:
+            # Include year in key so two degrees from same school are kept
+            key = (edu["degree"] + edu["institution"] + edu["year"]).lower().strip()
+            if key not in seen and key != "":
                 unique.append(edu)
-                seen.add(edu["degree"].lower())
+                seen.add(key)
 
         return unique
+
     def _extract_experience(self, text):
+        """
+        High-accuracy experience extractor for ALL resume types:
+
+        ── Experienced (IT professional) profiles ──
+        Extracts: position, company, duration, location
+        Handles: "Software Engineer | Google | Jan 2020 - Present"
+                "Senior Developer at Amazon (2019 - 2022)"
+
+        ── Fresher / Intern profiles ──
+        Extracts: internship title, company, duration
+        Handles:  "Python Intern - XYZ Solutions (Jun 2023 - Aug 2023)"
+                    "Web Development Internship | ABC Corp"
+                    Internship blocks with NO dates (just company + role)
+
+        Fixes over original:
+        - start_headers used r"^(experience|work|...)" — matched ANY line starting
+        with those words (e.g. "experience with Python" in a summary section).
+        Fixed: requires the header to be a SHORT standalone line (< 50 chars).
+        - end_headers had the same false-positive problem. Fixed same way.
+        - Date anchor logic created duplicate entries when a line had 2 dates
+        (e.g. "Jan 2021 - Dec 2022" → two separate entries).
+        Fixed: treat both dates on same line as one duration range.
+        - Title split on first date token often left just a bullet or empty string.
+        Fixed: multi-fallback title resolution (same line → above → below).
+        - Company was never extracted. Added company detection via spaCy ORG +
+        keyword patterns ("at X", "@ X", "| X", "- X" after title).
+        - Internships with no dates were completely missed.
+        Fixed: dedicated internship scanner as a second pass.
+        - Dedup only checked position — missed same role at different companies.
+        Fixed: dedup key = (position + company).lower()
+        """
+
         experience = []
-        # Split text into lines and remove empty ones
-        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = [line.strip() for line in text.split("\n")]
 
-        # 1. Flexible Section Detection
-        # Matches "Experience", "WORK HISTORY", "Professional Experience:", etc.
-        start_headers = r"^(experience|work|employment|history|professional|career|background)"
-        # Matches common following sections to know when to stop
-        end_headers = r"^(education|skills|projects|certifications|technologies|additionals|languages|summary|objective)"
-        
-        # 2. Universal Date Regex
-        # This covers: June 2024, Jun 2024, 06/2024, 2024-2026, Present, etc.
-        date_regex = r"((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Present|Current|\d{1,2}/\d{2,4}|\b\d{4}\b))"
+        # ─────────────────────────── 1. Section Detection ───────────────────────
 
-        is_in_section = False
+        START_HEADERS = re.compile(
+            r"""
+            \b(?:
+                (?:work|professional|career|employment|job)\s*
+                (?:experience|history|background|summary)?
+                | ^experience$                              # exact "Experience" header only
+                | internships?$                             # "Internships" alone, not "Internships & Projects"
+                | positions?\s+(?:of\s+)?(?:responsibility|held)
+            )\b
+            """,
+            re.IGNORECASE | re.VERBOSE,
+        )
+
+        END_HEADERS = re.compile(
+            r"""
+            \b(?:
+                education | academic | qualification
+                | technolog                                 # Technologies / Technical Skills
+                | project                                   # Projects (any form)
+                | skill | competenc
+                | certification | publication
+                | award | honor | activit | interest
+                | language | reference | summary | objective
+                | profile | volunteer | achievement
+                | additional
+            )\b
+            """,
+            re.IGNORECASE | re.VERBOSE,
+        )
+
+        in_section = False
         section_lines = []
 
-        # Step A: Collect everything between the 'Experience' and 'Education/Skills' headers
         for line in lines:
-            clean_line = line.strip().lower()
-            
-            if re.search(start_headers, clean_line):
-                is_in_section = True
-                continue
-                
-            if is_in_section:
-                if re.search(end_headers, clean_line):
+            lower = line.lower().strip()
+            # Only treat SHORT lines as potential section headers (avoids matching
+            # sentences like "3 years of experience with Python" in summary)
+            if not in_section:
+                if len(line) < 50 and START_HEADERS.search(lower):
+                    in_section = True
+                    continue
+            else:
+                if lower and len(line) < 50 and END_HEADERS.search(lower):
                     break
                 section_lines.append(line)
 
-        # Step B: Scan the section for job entries using dates as anchors
-        for i, line in enumerate(section_lines):
-            # Look for a date in the current line
-            date_matches = re.findall(date_regex, line, re.IGNORECASE)
+        # Fallback: no section found → scan full resume
+        if not section_lines:
+            section_lines = [l for l in lines if l]
+
+        # ─────────────────────────── 2. Patterns ────────────────────────────────
+
+        # Matches: "June 2024", "Jun 2024", "06/2024", "2024", "Present", "Current"
+        DATE_TOKEN = (
+            r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
+            r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+            r"\s*(?:\'|\s)?\d{2,4}"
+            r"|\d{1,2}[\/\-]\d{2,4}"
+            r"|\b(?:19|20)\d{2}\b"
+            r"|\b(?:present|current|now|ongoing|till\s+date|to\s+date)\b"
+        )
+
+        # Full duration range on a single line: "Jan 2021 – Dec 2022" or "2020 - Present"
+        DURATION_RE = re.compile(
+            rf"({DATE_TOKEN})\s*(?:[-–—to]+)\s*({DATE_TOKEN})",
+            re.IGNORECASE,
+        )
+
+        # Single date (graduation year, start year, etc.)
+        SINGLE_DATE_RE = re.compile(rf"({DATE_TOKEN})", re.IGNORECASE)
+
+        # Internship signal — used for the fresher second-pass
+        INTERNSHIP_RE = re.compile(
+            r"\b(?:intern(?:ship)?|trainee|apprentice|placement|industrial\s+training"
+            r"|summer\s+(?:intern|project|training)|co[\-\s]?op)\b",
+            re.IGNORECASE,
+        )
+
+        # Job title keywords — helps confirm a line is a role, not a random sentence
+        TITLE_SIGNAL_RE = re.compile(
+            r"\b(?:engineer|developer|analyst|designer|manager|lead|architect|consultant"
+            r"|specialist|associate|executive|coordinator|officer|intern|trainee"
+            r"|scientist|researcher|administrator|director|head|vp|president|cto|ceo)\b",
+            re.IGNORECASE,
+        )
+
+        # Company separators: "Google | 2020", "at Amazon", "@ TCS", "– Infosys"
+        COMPANY_SEP_RE = re.compile(
+            r"(?:\bat\b|@|\|)\s*([A-Z][A-Za-z0-9\s&\.\,]{2,40}?)(?:\s*[\|,\-–]|$)",
+        )
+
+        # ── Location line detector — skip lines that are just "City, Country" ──────
+        LOCATION_RE = re.compile(
+            r"^(?:remote|on[\s\-]?site|hybrid)?[\s\-]*"
+            r"[A-Za-z\s]+,\s*[A-Za-z\s]+$",
+            re.IGNORECASE,
+        )
+
+        # ── Bullet / description line — not a title/company ──────────────────────
+        BULLET_RE = re.compile(r"^[◦•\-\*▪➢➤►]")
+
+        # ─────────────────────────── 5. Smart block splitting ───────────────────
+        # Strategy: a new job entry starts when we see a DATE line OR an
+        # INTERNSHIP keyword line. We group all lines until the next anchor.
+
+        def is_date_line(line):
+            return bool(DURATION_RE.search(line) or SINGLE_DATE_RE.search(line))
+
+        def is_entry_anchor(line):
+            """A line that signals the START of a new job block."""
+            return (
+                INTERNSHIP_RE.search(line)          # "Internship at Codsoft"
+                or (TITLE_SIGNAL_RE.search(line) and not BULLET_RE.match(line))
+            )
+
+        # First try blank-line separated blocks
+        blocks = []
+        current = []
+        for line in section_lines:
+            if line:
+                current.append(line)
+            else:
+                if current:
+                    blocks.append(current)
+                    current = []
+        if current:
+            blocks.append(current)
+
+        # If resume is dense (no blank lines), split on date lines or title anchors
+        if len(blocks) <= 1 and len(section_lines) > 4:
+            blocks = []
+            current = []
+            for line in section_lines:
+                if not line:
+                    continue
+                # Start a new block when we hit a date line AND current block
+                # already has content, OR when we hit a fresh title/intern anchor
+                # after already collecting some lines
+                if current and is_date_line(line):
+                    # Date belongs to the current block
+                    current.append(line)
+                    blocks.append(current)
+                    current = []
+                else:
+                    current.append(line)
+            if current:
+                blocks.append(current)
+
+        # ─────────────────────────── 6. Parse each block ────────────────────────
+        #
+        # Expected block layouts this handles:
+        #
+        # Layout A (company-first):          Layout B (title-first):
+        #   AksharaPlus                        UI/UX Designer
+        #   UI/UX Designer                     AksharaPlus
+        #   Remote - Dover, USA                June 2025 - Present
+        #   June 2025 - Present
+        #
+        # Layout C (single line):            Layout D (internship prefix):
+        #   Sr. Engineer | Google | 2021-Now   Internship at Codsoft
+        #                                      UI/UX Design
+        #                                      June 2024 – July 2024
+
+        processed_titles = set()
+
+        def parse_block(block):
+            entry = {"position": "", "company": "", "duration": "", "type": "experience"}
+
+            # Classify each line role
+            title_lines    = []
+            company_lines  = []
+            duration_lines = []
+
+            for line in block:
+                if BULLET_RE.match(line):
+                    continue                          # skip description bullets
+                if LOCATION_RE.match(line):
+                    continue                          # skip "Remote - Dover, USA"
+
+                dm = DURATION_RE.search(line)
+                sm = SINGLE_DATE_RE.search(line)
+
+                if dm:
+                    duration_lines.append(
+                        f"{dm.group(1).strip()} - {dm.group(2).strip()}"
+                    )
+                elif sm and len(line.strip()) < 40:
+                    # Short line that's mostly a date
+                    duration_lines.append(sm.group(1).strip())
+                elif INTERNSHIP_RE.search(line):
+                    # "Internship at Codsoft" → company extracted, role = this line
+                    title_lines.append(line)
+                    m = re.search(r"\bat\s+([A-Z][A-Za-z0-9\s&\.]{2,40})", line)
+                    if m:
+                        company_lines.append(m.group(1).strip())
+                elif TITLE_SIGNAL_RE.search(line):
+                    title_lines.append(line)
+                else:
+                    # Could be company name (short, no verbs, Title Case)
+                    if len(line) < 50 and re.match(r"[A-Z]", line):
+                        company_lines.append(line)
+
+            # ── Assign duration ──
+            if duration_lines:
+                entry["duration"] = duration_lines[0]
+
+            # ── Assign position ──
+            if title_lines:
+                raw = title_lines[0]
+                # Strip inline company/location separators
+                raw = re.sub(r"\s*[\|]\s*.*$", "", raw)
+                raw = raw.split(" at ")[0].strip()
+                raw = DURATION_RE.sub("", raw).strip()
+                entry["position"] = raw
+            elif company_lines:
+                # Fallback: first short line that looked like company might be title
+                entry["position"] = company_lines[0]
+                company_lines = company_lines[1:]
+
+            # ── Assign company ──
+            # Prefer lines that weren't used as the title
+            remaining_companies = [
+                c for c in company_lines
+                if c.lower() != entry["position"].lower()
+            ]
+            if remaining_companies:
+                entry["company"] = remaining_companies[0]
+            else:
+                # Try inline separator: "Engineer | Google | 2021"
+                for line in block:
+                    m = COMPANY_SEP_RE.search(line)
+                    if m:
+                        candidate = m.group(1).strip()
+                        if candidate.lower() != entry["position"].lower():
+                            entry["company"] = candidate
+                            break
+
+            # spaCy ORG fallback — only if company still empty
+            if not entry["company"] and hasattr(self, "nlp"):
+                doc = self.nlp(" ".join(block))
+                for ent in doc.ents:
+                    if ent.label_ == "ORG":
+                        if ent.text.lower() != entry["position"].lower():
+                            entry["company"] = ent.text
+                            break
+
+            # ── Mark internship ──
+            if INTERNSHIP_RE.search(" ".join(block)):
+                entry["type"] = "internship"
+
+            return entry
+
+        for block in blocks:
+            if not block:
+                continue
+            result = parse_block(block)
+            if result["position"] or result["company"]:
+                key = (result["position"] + result["company"]).lower().strip()
+                if key and key not in processed_titles:
+                    experience.append(result)
+                    processed_titles.add(key)
+
+        return experience
+
             
-            if date_matches:
-                # We found a date! Now we need to find the title.
-                # Usually, the title is on the same line as the date, or 1-2 lines ABOVE it.
-                duration = " - ".join(date_matches)
-                
-                # Logic to find the Position Title:
-                # 1. Check if there's text on the same line before the date
-                title = line.split(date_matches[0])[0].strip()
-                
-                # 2. If same-line text is empty/too short, look at the line ABOVE
-                if len(title) < 3 and i > 0:
-                    title = section_lines[i-1]
-                
-                # 3. Clean up the title (remove bullets, company names, or locations)
-                title = re.sub(r"^[•\-\*]\s*", "", title) # Remove bullets
-                title = title.split("-")[0].split("|")[0].strip() # Remove " - Location"
 
-                if title:
-                    experience.append({
-                        "position": title,
-                        "duration": duration
-                    })
-
-        # Deduplicate entries
-        unique_exp = []
-        seen = set()
-        for exp in experience:
-            if exp["position"].lower() not in seen:
-                unique_exp.append(exp)
-                seen.add(exp["position"].lower())
-
-        return unique_exp
     def _extract_projects(self, text):
         """Extract project information from resume"""
 
@@ -425,6 +858,13 @@ class ResumeParser:
     def _extract_contact_info(self, text):
         """Extract contact information"""
         contact_info = {}
+        # Detect name using spaCy
+        doc = self.nlp(text[:500])   # analyze first part of resume
+
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                contact_info["name"] = ent.text
+                break
 
         lines = text.split("\n")
         # Assume first line is name

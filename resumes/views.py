@@ -316,21 +316,59 @@ class ResumeUploadView(generics.CreateAPIView):
         return completeness_score
 
     def _generate_score_feedback(self, resume, analysis):
-        """Generate precise feedback based on what is actually missing"""
-        
+        """Generate feedback based on score and missing resume elements"""
+
         feedback = []
 
+        score = analysis.overall_score or 0
+        text = (resume.raw_text or "").lower()
         contact_info = resume.extracted_contact_info or {}
 
-        # Contact Info Check
+        # --------------------------------------------------
+        # 1. SCORE BASED FEEDBACK (always shown first)
+        # --------------------------------------------------
+        if score >= 85:
+            feedback.append({
+                "reason": "Strong resume",
+                "suggestion": "Your resume is well structured. Add measurable achievements or certifications to stand out further."
+            })
+        elif score >= 70:
+            feedback.append({
+                "reason": "Good resume but can be improved",
+                "suggestion": "Add more quantified achievements, certifications, or advanced projects to increase your score."
+            })
+        elif score >= 50:
+            feedback.append({
+                "reason": "Resume needs improvement",
+                "suggestion": "Improve your resume by adding more technical skills, projects, and structured sections."
+            })
+        else:
+            feedback.append({
+                "reason": "Weak resume structure",
+                "suggestion": "Add important sections like skills, education, projects, and experience."
+            })
+
+        # --------------------------------------------------
+        # 2. CONTACT INFORMATION CHECK
+        # --------------------------------------------------
         missing_contacts = []
-        if not contact_info.get('name'):
+
+        if not contact_info.get("name"):
             missing_contacts.append("name")
-        if not contact_info.get('email'):
+
+        if not contact_info.get("email"):
             missing_contacts.append("email")
-        if not contact_info.get('phone'):
+
+        if not contact_info.get("phone"):
             missing_contacts.append("phone number")
-        if not contact_info.get('linkedin') and 'linkedin' not in (resume.raw_text or "").lower():
+
+        linkedin_detected = (
+            contact_info.get("linkedin")
+            or "linkedin.com" in text
+            or "linkedin" in text
+        )
+
+        if not linkedin_detected:
             missing_contacts.append("LinkedIn profile")
 
         if missing_contacts:
@@ -339,55 +377,65 @@ class ResumeUploadView(generics.CreateAPIView):
                 "suggestion": f"Add {', '.join(missing_contacts)}"
             })
 
-
-        # Skills Check
+        # --------------------------------------------------
+        # 3. SKILLS CHECK
+        # --------------------------------------------------
         skills = resume.extracted_skills or []
-        if len(skills) < 5:
+        if len(skills) < 4:
             feedback.append({
                 "reason": "Not enough technical skills listed",
-                "suggestion": "Add more relevant skills like frameworks, tools, or technologies"
+                "suggestion": "Add more relevant skills like frameworks, tools, or technologies."
             })
 
-
-        # Education Check
+        # --------------------------------------------------
+        # 4. EDUCATION CHECK
+        # --------------------------------------------------
         education = resume.extracted_education or []
         if not education:
             feedback.append({
                 "reason": "Education section missing",
-                "suggestion": "Include your degree, university and graduation year"
+                "suggestion": "Include your degree, university name, and graduation year."
             })
 
-
-        # Experience Check
+        # --------------------------------------------------
+        # 5. EXPERIENCE CHECK
+        # --------------------------------------------------
         experience = resume.extracted_experience or []
         if len(experience) == 0:
             feedback.append({
                 "reason": "No work experience detected",
-                "suggestion": "Add internships, freelance work, or project experience"
+                "suggestion": "Add internships, freelance work, or relevant work experience."
             })
 
-
-        # Projects Check
+        # --------------------------------------------------
+        # 6. PROJECT CHECK
+        # --------------------------------------------------
         projects = resume.extracted_projects or []
         if len(projects) < 1:
             feedback.append({
                 "reason": "No technical projects found",
-                "suggestion": "Add projects showing technologies you used"
+                "suggestion": "Add projects demonstrating technologies you used."
             })
 
-
-        # ATS Structure Check
-        text = (resume.raw_text or "").lower()
+        # --------------------------------------------------
+        # 7. ATS STRUCTURE CHECK
+        # --------------------------------------------------
         required_sections = ["skills", "education", "experience"]
-        missing_sections = [sec for sec in required_sections if sec not in text]
+
+        missing_sections = []
+        for sec in required_sections:
+            if sec not in text and sec + "s" not in text:
+                missing_sections.append(sec)
 
         if missing_sections:
             feedback.append({
                 "reason": "Resume structure not ATS optimized",
-                "suggestion": f"Add clear sections like {', '.join(missing_sections)}"
+                "suggestion": f"Add clear sections like {', '.join(missing_sections)}."
             })
 
         return feedback
+
+
 
 class ResumeListView(generics.ListAPIView):
     """List user's resumes"""

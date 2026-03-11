@@ -147,14 +147,15 @@ def rank_candidates_for_job(request, job_id):
     # Get threshold from request
     threshold = request.data.get('threshold', 30.0)
     
-    # Get all matches for this job above threshold
+    # Get all matches for this job above threshold with related data
     matches = JobMatch.objects.filter(
         job=job,
         overall_score__gte=threshold
-    ).order_by('-overall_score')
+    ).select_related('resume', 'user', 'resume__user').order_by('-overall_score')
     
     # Serialize matches
     serializer = JobMatchSerializer(matches, many=True)
+    
     return Response({
         'job': JobSerializer(job).data,
         'candidates': serializer.data,

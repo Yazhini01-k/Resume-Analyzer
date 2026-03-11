@@ -116,14 +116,83 @@ class JobMatchSerializer(serializers.ModelSerializer):
     resume_title = serializers.CharField(source='resume.title', read_only=True)
     job_title = serializers.CharField(source='job.title', read_only=True)
     job_company = serializers.CharField(source='job.company', read_only=True)
+    candidate_details = serializers.SerializerMethodField()
+    applied_at = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    resume_details = serializers.SerializerMethodField()
+    application_id = serializers.SerializerMethodField()
     
     class Meta:
         model = JobMatch
         fields = ['id', 'resume', 'resume_title', 'job', 'job_title', 'job_company',
                  'overall_score', 'skills_match_score', 'experience_match_score', 
                  'education_match_score', 'matched_skills', 'missing_skills', 
-                 'additional_skills', 'match_reason', 'recommendation_rank', 'created_at']
+                 'additional_skills', 'match_reason', 'recommendation_rank', 'created_at',
+                 'candidate_details', 'applied_at', 'status', 'resume_details', 'application_id']
         read_only_fields = ['id', 'created_at']
+    
+    def get_candidate_details(self, obj):
+        """Get candidate details from resume user"""
+        if obj.resume and obj.resume.user:
+            user = obj.resume.user
+            return {
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'email': user.email,
+                'phone': getattr(user, 'phone', ''),
+            }
+        return None
+    
+    def get_applied_at(self, obj):
+        """Get application date if exists, otherwise use match creation date"""
+        try:
+            from applications.models import Application
+            application = Application.objects.filter(
+                job=obj.job, 
+                candidate=obj.resume.user
+            ).first()
+            if application:
+                return application.applied_at
+        except:
+            pass
+        return obj.created_at
+    
+    def get_status(self, obj):
+        """Get application status if exists"""
+        try:
+            from applications.models import Application
+            application = Application.objects.filter(
+                job=obj.job, 
+                candidate=obj.resume.user
+            ).first()
+            if application:
+                return application.status
+        except:
+            pass
+        return 'pending'
+    
+    def get_resume_details(self, obj):
+        """Get resume file details"""
+        if obj.resume:
+            return {
+                'file': obj.resume.file.url if obj.resume.file else None,
+                'title': obj.resume.title,
+            }
+        return None
+    
+    def get_application_id(self, obj):
+        """Get the actual application ID if exists"""
+        try:
+            from applications.models import Application
+            application = Application.objects.filter(
+                job=obj.job, 
+                candidate=obj.resume.user
+            ).first()
+            if application:
+                return application.id
+        except:
+            pass
+        return None
 
 
 class JobRecommendationSerializer(serializers.ModelSerializer):

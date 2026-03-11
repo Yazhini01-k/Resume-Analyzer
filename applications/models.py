@@ -74,6 +74,7 @@ class Application(models.Model):
     
     def change_status(self, new_status, notes=None):
         """Change application status with history tracking"""
+        from django.utils import timezone
         old_status = self.status
         self.status = new_status
         self.last_status_change = timezone.now()

@@ -125,14 +125,33 @@ def change_application_status(request, application_id):
         )
     
     # Change status
-    application.change_status(new_status, notes)
+    old_status = application.status
+    application.status = new_status
+    application.last_status_change = timezone.now()
+    
+    if notes:
+        application.hr_notes = notes
+    
+    application.save()
+    
+    # Create status change history
+    ApplicationStatusHistory.objects.create(
+        application=application,
+        old_status=old_status,
+        new_status=new_status,
+        changed_by=request.user,
+        notes=notes
+    )
     
     # Send email notification to candidate if status changed to rejected or offered
     if new_status in ['rejected', 'offered']:
         _send_candidate_status_notification(application, new_status)
     
-    serializer = ApplicationSerializer(application)
-    return Response(serializer.data)
+    # Return the updated application data in the format expected by frontend
+    return Response({
+        'status': application.status,
+        'hr_notes': application.hr_notes
+    })
 
 
 @api_view(['POST'])

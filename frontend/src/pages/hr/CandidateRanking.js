@@ -44,24 +44,39 @@ const CandidateRanking = () => {
   );
 
   // Fetch ranked candidates for selected job
-  const { data: candidates, isLoading, refetch } = useQuery(
+  const { data: candidates, isLoading, refetch, error } = useQuery(
     ['ranked-candidates', selectedJob, threshold],
     () => {
       if (!selectedJob) return { data: { candidates: [] } };
+      console.log('Fetching candidates for job:', selectedJob, 'threshold:', threshold);
       return jobsAPI.rankCandidates(selectedJob, threshold);
     },
     {
       select: (response) => {
+        console.log('API Response for job', selectedJob, ':', response);
         const data = response?.data;
         if (Array.isArray(data?.candidates)) {
+          console.log('Found candidates array:', data.candidates.length, 'candidates');
           return data.candidates;
         }
         if (Array.isArray(data)) {
+          console.log('Found direct array:', data.length, 'candidates');
           return data;
         }
+        console.log('No candidates found, returning empty array');
         return [];
       },
       enabled: !!selectedJob,
+      onError: (error) => {
+        console.error('Failed to fetch candidates for job', selectedJob, ':', error);
+        message.error(`Failed to load candidates: ${error.response?.data?.error || error.message || 'Please try again.'}`);
+      },
+      onSuccess: (data) => {
+        console.log('Candidates loaded successfully for job', selectedJob, ':', data.length, 'candidates');
+        if (data.length === 0) {
+          message.info('No candidates found for this job above the selected threshold.');
+        }
+      }
     }
   );
 
@@ -69,15 +84,28 @@ const CandidateRanking = () => {
   const changeStatusMutation = useMutation(
     ({ applicationId, status, notes }) => applicationsAPI.changeStatus(applicationId, status, notes),
     {
-      onSuccess: () => {
+      onSuccess: (response, variables) => {
         message.success('Application status updated successfully!');
         setStatusModalVisible(false);
         statusForm.resetFields();
+        
+        // Update the candidate in the local cache
+        queryClient.setQueryData(['ranked-candidates', selectedJob, threshold], (oldData) => {
+          if (!Array.isArray(oldData)) return oldData; // Ensure oldData is an array
+          return oldData.map(candidate => 
+            candidate.application_id === variables.applicationId 
+              ? { ...candidate, status: response.status, hr_notes: response.hr_notes }
+              : candidate
+          );
+        });
+        
+        // Invalidate to ensure fresh data
         queryClient.invalidateQueries('ranked-candidates');
         queryClient.invalidateQueries('application-statistics');
       },
       onError: (error) => {
-        message.error('Failed to update status. Please try again.');
+        console.error('Status update error:', error);
+        message.error(`Failed to update status: ${error.response?.data?.error || error.message || 'Please try again.'}`);
       },
     }
   );
@@ -100,8 +128,15 @@ const CandidateRanking = () => {
   };
 
   const handleStatusSubmit = async (values) => {
+    // Use the application_id if available, otherwise show an error
+    const applicationId = selectedApplication.application_id;
+    if (!applicationId) {
+      message.error('No application found for this candidate. The candidate must apply first.');
+      return;
+    }
+    
     changeStatusMutation.mutate({
-      applicationId: selectedApplication.id,
+      applicationId: applicationId,
       status: values.status,
       notes: values.notes,
     });
@@ -247,12 +282,6 @@ const CandidateRanking = () => {
       ),
     },
     {
-      title: 'Applied',
-      dataIndex: 'applied_at',
-      key: 'applied_at',
-      render: (date) => new Date(date).toLocaleDateString(),
-    },
-    {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
@@ -264,15 +293,25 @@ const CandidateRanking = () => {
           >
             Review
           </Button>
-          <Button 
-            type="link" 
-            icon={<DownloadOutlined />}
-            onClick={() => window.open(record.resume_details?.file, '_blank')}
-          >
-            Resume
-          </Button>
         </Space>
       ),
+    },
+    {
+      title: 'Applied',
+      dataIndex: 'applied_at',
+      key: 'applied_at',
+      render: (date) => {
+        if (!date) return 'Not Available';
+        try {
+          return new Date(date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+        } catch (error) {
+          return 'Invalid Date';
+        }
+      },
     },
   ];
 
@@ -330,13 +369,13 @@ const CandidateRanking = () => {
         </Card>
 
         {/* Statistics */}
-        {candidates && (
+        {selectedJob && candidates && (
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={24} sm={8}>
               <Card>
                 <Statistic
                   title="Total Candidates"
-                  value={candidates.total_candidates}
+                  value={candidates?.length || 0}
                   prefix={<TeamOutlined />}
                   valueStyle={{ color: '#1890ff' }}
                 />
@@ -346,7 +385,7 @@ const CandidateRanking = () => {
               <Card>
                 <Statistic
                   title="Above Threshold"
-                  value={candidates.candidates?.length}
+                  value={candidates?.filter(candidate => candidate.overall_score >= threshold).length || 0}
                   prefix={<EyeOutlined />}
                   valueStyle={{ color: '#52c41a' }}
                 />
@@ -356,7 +395,7 @@ const CandidateRanking = () => {
               <Card>
                 <Statistic
                   title="Average Match"
-                  value={candidates.candidates?.reduce((acc, c) => acc + c.overall_score, 0) / candidates.candidates?.length || 0}
+                  value={candidates?.reduce((acc, c) => acc + (c.overall_score || 0), 0) / (candidates?.length || 1) || 0}
                   precision={1}
                   suffix="%"
                   valueStyle={{ color: '#722ed1' }}
@@ -374,10 +413,39 @@ const CandidateRanking = () => {
               <Title level={5} type="secondary">Select a Job to View Candidates</Title>
               <Text type="secondary">Choose a job posting to see ranked candidates</Text>
             </div>
+          ) : error ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <FilterOutlined style={{ fontSize: 48, color: '#ff4d4f', marginBottom: 16 }} />
+              <Title level={5} type="danger">Error Loading Candidates</Title>
+              <Text type="secondary">Failed to load candidates for this job. Please try again.</Text>
+              <Button 
+                type="primary" 
+                onClick={() => refetch()} 
+                style={{ marginTop: 16 }}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : candidates && candidates.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <EyeOutlined style={{ fontSize: 48, color: '#faad14', marginBottom: 16 }} />
+              <Title level={5} type="warning">No Candidates Found</Title>
+              <Text type="secondary">
+                No candidates found for this job above {threshold}% threshold. 
+                Try lowering the threshold to see more candidates.
+              </Text>
+              <Button 
+                type="primary" 
+                onClick={() => setThreshold(10)} 
+                style={{ marginTop: 16 }}
+              >
+                Show All Candidates (10% threshold)
+              </Button>
+            </div>
           ) : (
             <Table
               columns={columns}
-              dataSource={candidates?.candidates || []}
+              dataSource={candidates?.filter(candidate => candidate.overall_score >= threshold) || []}
               loading={isLoading}
               rowKey="id"
               pagination={{

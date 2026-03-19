@@ -8,4 +8,5 @@ urlpatterns = [
     path('<int:resume_id>/analysis/', views.resume_analysis, name='resume-analysis'),
     path('<int:resume_id>/reprocess/', views.reprocess_resume, name='reprocess-resume'),
     path('skill-profile/', views.SkillProfileView.as_view(), name='skill-profile'),
+    path('skill-gap/', views.SkillGapAnalysisView.as_view(), name='skill-gap-analysis'),
 ]

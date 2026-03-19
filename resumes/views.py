@@ -1,512 +1,1117 @@
 from docx import text
 
+
+
 from .utils import find_skill_gap
+
 import os
+
 import json
+
 from django.conf import settings
+
 from django.http import JsonResponse
+
 from django.shortcuts import get_object_or_404
+
 from rest_framework import generics, permissions, status
+
 from rest_framework.decorators import api_view, permission_classes
+
 from rest_framework.response import Response
+
 from rest_framework.parsers import MultiPartParser, FormParser
+
 from .models import Resume, SkillProfile, ResumeAnalysis
+
 from .serializers import (
+
     ResumeSerializer, ResumeCreateSerializer, ResumeDetailSerializer,
+
     SkillProfileSerializer, ResumeAnalysisSerializer
+
 )
+
 from .utils import ResumeTextExtractor, ResumeParser, FeatureVectorizer
+
 from accounts.models import User
 
 
+
+
+
 class ResumeUploadView(generics.CreateAPIView):
+
     """Upload and process resume"""
+
     serializer_class = ResumeCreateSerializer
+
     permission_classes = [permissions.IsAuthenticated]
+
     parser_classes = [MultiPartParser, FormParser]
+
     
+
     def perform_create(self, serializer):
+
         # Save the resume file
+
         resume = serializer.save(user=self.request.user)
+
         
+
         # Start async processing (in production, use Celery)
+
         try:
+
             self._process_resume(resume)
+
         except Exception as e:
+
             resume.processing_status = 'failed'
+
             resume.error_message = str(e)
+
             resume.save()
+
     
+
     def _process_resume(self, resume):
+
         """Process uploaded resume"""
+
         # Update status
+
         resume.processing_status = 'processing'
+
         resume.save()
+
         
+
         # Extract file extension
+
         file_extension = resume.file.name.split('.')[-1].lower()
+
         resume.file_type = file_extension
+
         resume.file_size = resume.file.size
+
         resume.original_filename = resume.file.name.split('/')[-1]
+
         
+
         # Extract text
+
         extractor = ResumeTextExtractor()
+
         file_path = resume.file.path
+
         raw_text = extractor.extract_text(file_path, file_extension)
+
         resume.raw_text = raw_text
+
         
+
         # Parse resume content
+
         parser = ResumeParser()
+
         parsed_data = parser.parse_resume(raw_text)
+
         
+
         # Update resume with parsed data
+
         resume.processed_text = parsed_data['processed_text']
+
         resume.extracted_skills = parsed_data['extracted_skills']
+
         resume.extracted_education = parsed_data['extracted_education']
+
         resume.extracted_experience = parsed_data['extracted_experience']
+
         resume.extracted_contact_info = parsed_data['extracted_contact_info']
+
         
+
         # NEW: Store additional extracted data
+
         resume.extracted_projects = parsed_data['extracted_projects']
+
         resume.extracted_certificates = parsed_data['extracted_certificates']
+
         resume.extracted_achievements = parsed_data['extracted_achievements']
+
         
+
         # Create feature vector
+
         vectorizer = FeatureVectorizer(max_features=settings.TF_IDF_MAX_FEATURES)
+
         try:
+
             # Get all processed resumes for fitting
+
             all_resumes = Resume.objects.filter(
+
                 processing_status='completed'
+
             ).exclude(id=resume.id)
+
             
+
             if all_resumes.exists():
+
                 # Fit on existing resumes and transform new one
+
                 documents = [r.processed_text for r in all_resumes if r.processed_text]
+
                 documents.append(resume.processed_text)
+
                 vectors = vectorizer.fit_transform(documents)
+
                 resume.feature_vector = vectors[-1]  # Get last vector (new resume)
+
                 resume.skill_keywords = vectorizer.get_feature_names()
+
             else:
+
                 # First resume, fit on just this one
+
                 vectors = vectorizer.fit_transform([resume.processed_text])
+
                 resume.feature_vector = vectors[0]
+
                 resume.skill_keywords = vectorizer.get_feature_names()
+
                 
+
         except Exception as e:
+
             # If vectorization fails, continue without it
+
             resume.feature_vector = []
+
             resume.skill_keywords = []
+
         
+
         # Update processing status
+
         resume.processing_status = 'completed'
+
         resume.save()
+
         
+
         # Update user's skill profile using STRICT method
+
         self._create_strict_skill_profile(resume.user, resume.extracted_skills)
+
         
+
         # Create analysis
+
         self._create_resume_analysis(resume)
+
     
+
     def _create_strict_skill_profile(self, user, skills):
+
         """STRICT: Create or update user's skill profile based ONLY on extracted skills"""
+
         if not skills:
+
             return
+
         
+
         # Create skills dictionary ONLY from extracted skills
+
         skills_dict = {}
+
         for skill in skills:
+
             if isinstance(skill, str) and skill.strip():
+
                 skills_dict[skill.lower().strip()] = 'intermediate'
+
         
+
         if not skills_dict:
+
             return
+
         
+
         # Get or create skill profile
+
         skill_profile, created = SkillProfile.objects.get_or_create(
+
             user=user,
+
             defaults={
+
                 'skills': skills_dict,
+
                 'total_skills_count': len(skills_dict)
+
             }
+
         )
+
         
+
         if not created:
+
             # Update existing skill profile with new skills ONLY from this resume
+
             skill_profile.skills = skills_dict
+
             skill_profile.total_skills_count = len(skills_dict)
+
             skill_profile.save()
+
     
+
     
+
     def _create_resume_analysis(self, resume):
+
         """Create resume analysis"""
+
         analysis = ResumeAnalysis.objects.create(resume=resume)
+
         
+
         # Calculate scores (simplified version)
+
         text = resume.raw_text or ""
+
         
+
         # Word count
+
         words = text.split()
+
         analysis.word_count = len(words)
+
         
+
         if resume.extracted_skills:
+
             # Calculate skill gaps (initially empty list for job comparison later)
+
             skill_gap = find_skill_gap(resume.extracted_skills, [])
+
             analysis.skill_gaps = skill_gap
+
     
+
         # Sentence count
+
         import nltk
+
         try:
+
             analysis.sentence_count = len(nltk.sent_tokenize(text))
+
         except:
+
             analysis.sentence_count = text.count('.') + text.count('!') + text.count('?')
+
         
+
         # Calculate individual component scores
+
         basic_score = self._calculate_basic_score(resume)
+
         skills_score = self._calculate_skills_score(resume)
+
         education_score = self._calculate_education_score(resume)
+
         experience_score = self._calculate_experience_score(resume)
+
         projects_score = self._calculate_projects_score(resume)
+
         structure_score = self._calculate_structure_score(resume)
+
         
+
         # Apply simple formula: Resume Score = Basic + Skills + Education + Experience + Projects + Structure
+
         total_score = basic_score + skills_score + education_score + experience_score + projects_score + structure_score
+
         
+
         # Store individual scores
+
         analysis.basic_score = basic_score
+
         analysis.skills_score = skills_score
+
         analysis.experience_score = experience_score
+
         analysis.education_score = education_score
+
         analysis.projects_score = projects_score
+
         analysis.structure_score = structure_score
+
         
+
         # Store overall score
+
         analysis.overall_score = round(total_score, 2)
+
         
+
         # Store completeness for backward compatibility
+
         analysis.completeness_score = self._calculate_completeness_score(resume)
+
         
+
         analysis.save()
+
         
+
         feedback = self._generate_score_feedback(resume, analysis)
+
         analysis.feedback = feedback
+
         analysis.save()
+
+
 
     def _calculate_basic_score(self, resume):
+
         """Calculate basic score (15 points max): Name, email, phone, LinkedIn"""
+
         score = 0
+
         contact_info = resume.extracted_contact_info or {}
+
         
+
         # Each contact element is worth points
+
         if contact_info.get('name'):
+
             score += 4
+
         if contact_info.get('email'):
+
             score += 4
+
         if contact_info.get('phone'):
+
             score += 4
+
         if contact_info.get('linkedin') or 'linkedin' in (resume.raw_text or "").lower():
+
             score += 3
+
         
+
         return min(15, score)
+
+
 
     def _calculate_skills_score(self, resume):
+
         """Calculate skills score (20 points max): Skill match with job description"""
+
         skills_count = len(resume.extracted_skills) if resume.extracted_skills else 0
+
         # Approximately 1 point per skill, max 20
+
         if skills_count >= 10:
+
             return 20
+
         elif skills_count >= 7:
+
             return 15
+
         elif skills_count >= 4:
+
             return 10
+
         elif skills_count >= 1:
+
             return 5
+
         else:
+
             return 0
+
     
+
     def _calculate_education_score(self, resume):
+
         """Calculate education score (10 points max): Degree, university, GPA"""
+
         score = 0
+
         education = resume.extracted_education or []
+
         
+
         if education:
+
             # Base 5 points for having education
+
             score += 5
+
             
+
             # Check for GPA or specific degree info
+
             edu_text = str(education).lower()
+
             if 'gpa' in edu_text or any(degree in edu_text for degree in ['bachelor', 'master', 'phd', 'diploma']):
+
                 score += 5
+
         
+
         return min(10, score)
+
     
+
     def _calculate_experience_score(self, resume):
+
         """Calculate experience score (25 points max): Years, achievements"""
+
         exp_count = len(resume.extracted_experience) if resume.extracted_experience else 0
+
         text = resume.raw_text or ""
+
         
+
         # Base: 5 points per experience entry (max 15)
+
         score = min(15, exp_count * 5)
+
         
+
         # Bonus points for achievements (max 10)
+
         achievement_keywords = [
+
             'achieved', 'awarded', 'recognized', 'increased', 'improved', 
+
             'optimized', 'reduced', 'led', 'managed', 'success'
+
         ]
+
         achievement_count = sum(text.lower().count(k) for k in achievement_keywords)        
+
         score += min(10, achievement_count * 2)
+
         
+
         return min(25, score)
+
     
+
     def _calculate_projects_score(self, resume):
+
         """Calculate projects score (15 points max): Technical projects"""
+
         projects = resume.extracted_projects or []
+
         text = resume.raw_text or ""
+
         
+
         score = 0
+
         
+
         # 5 points for extracted projects
+
         if projects:
+
             score += min(5, len(projects) * 2)
+
         
+
         # Additional points from keywords
+
         project_keywords = [
+
             'project', 'developed', 'built', 'created', 'designed',
+
             'implemented', 'deployed', 'application', 'website', 'software'
+
         ]
+
         project_count = sum(1 for keyword in project_keywords if keyword in text.lower())
+
         score += min(10, project_count)
+
         
+
         return min(15, score)
+
     
+
     def _calculate_structure_score(self, resume):
+
         """Calculate structure score (15 points max): ATS formatting"""
+
         text = resume.raw_text or ""
+
         score = 0
+
         
+
         # Check for common resume sections - 3 points each
+
         sections = [
+
             "skills",
+
             "technology",
+
             "technologies",
+
             "education",
+
             "experience",
+
             "project",
+
             "summary",
+
             "contact"
+
         ]
+
         text_lower = text.lower()
+
         
+
         for section in sections:
+
             if section in text_lower:
+
                 score += 3
+
         
+
         return min(15, score)
+
     
+
     def _calculate_completeness_score(self, resume):
+
         """Calculate completeness score for backward compatibility"""
+
         completeness_score = 0
+
         if resume.extracted_skills:
+
             completeness_score += 25
+
         if resume.extracted_education:
+
             completeness_score += 25
+
         if resume.extracted_experience:
+
             completeness_score += 25
+
         if resume.extracted_contact_info:
+
             completeness_score += 25
+
         return completeness_score
 
+
+
     def _generate_score_feedback(self, resume, analysis):
+
         """Generate feedback based on score and missing resume elements"""
+
+
 
         feedback = []
 
+
+
         score = analysis.overall_score or 0
+
         text = (resume.raw_text or "").lower()
+
         contact_info = resume.extracted_contact_info or {}
 
-        # --------------------------------------------------
-        # 1. SCORE BASED FEEDBACK (always shown first)
-        # --------------------------------------------------
-        if score >= 85:
-            feedback.append({
-                "reason": "Strong resume",
-                "suggestion": "Your resume is well structured. Add measurable achievements or certifications to stand out further."
-            })
-        elif score >= 70:
-            feedback.append({
-                "reason": "Good resume but can be improved",
-                "suggestion": "Add more quantified achievements, certifications, or advanced projects to increase your score."
-            })
-        elif score >= 50:
-            feedback.append({
-                "reason": "Resume needs improvement",
-                "suggestion": "Improve your resume by adding more technical skills, projects, and structured sections."
-            })
-        else:
-            feedback.append({
-                "reason": "Weak resume structure",
-                "suggestion": "Add important sections like skills, education, projects, and experience."
-            })
+
 
         # --------------------------------------------------
-        # 2. CONTACT INFORMATION CHECK
+
+        # 1. SCORE BASED FEEDBACK (always shown first)
+
         # --------------------------------------------------
+
+        if score >= 85:
+
+            feedback.append({
+
+                "reason": "Strong resume",
+
+                "suggestion": "Your resume is well structured. Add measurable achievements or certifications to stand out further."
+
+            })
+
+        elif score >= 70:
+
+            feedback.append({
+
+                "reason": "Good resume but can be improved",
+
+                "suggestion": "Add more quantified achievements, certifications, or advanced projects to increase your score."
+
+            })
+
+        elif score >= 50:
+
+            feedback.append({
+
+                "reason": "Resume needs improvement",
+
+                "suggestion": "Improve your resume by adding more technical skills, projects, and structured sections."
+
+            })
+
+        else:
+
+            feedback.append({
+
+                "reason": "Weak resume structure",
+
+                "suggestion": "Add important sections like skills, education, projects, and experience."
+
+            })
+
+
+
+        # --------------------------------------------------
+
+        # 2. CONTACT INFORMATION CHECK
+
+        # --------------------------------------------------
+
         missing_contacts = []
 
+
+
         if not contact_info.get("name"):
+
             missing_contacts.append("name")
 
+
+
         if not contact_info.get("email"):
+
             missing_contacts.append("email")
 
+
+
         if not contact_info.get("phone"):
+
             missing_contacts.append("phone number")
 
+
+
         linkedin_detected = (
+
             contact_info.get("linkedin")
+
             or "linkedin.com" in text
+
             or "linkedin" in text
+
         )
 
+
+
         if not linkedin_detected:
+
             missing_contacts.append("LinkedIn profile")
 
+
+
         if missing_contacts:
+
             feedback.append({
+
                 "reason": "Missing contact information",
+
                 "suggestion": f"Add {', '.join(missing_contacts)}"
+
             })
 
+
+
         # --------------------------------------------------
+
         # 3. SKILLS CHECK
+
         # --------------------------------------------------
+
         skills = resume.extracted_skills or []
+
         if len(skills) < 4:
+
             feedback.append({
+
                 "reason": "Not enough technical skills listed",
+
                 "suggestion": "Add more relevant skills like frameworks, tools, or technologies."
+
             })
 
+
+
         # --------------------------------------------------
+
         # 4. EDUCATION CHECK
+
         # --------------------------------------------------
+
         education = resume.extracted_education or []
+
         if not education:
+
             feedback.append({
+
                 "reason": "Education section missing",
+
                 "suggestion": "Include your degree, university name, and graduation year."
+
             })
 
+
+
         # --------------------------------------------------
+
         # 5. EXPERIENCE CHECK
+
         # --------------------------------------------------
+
         experience = resume.extracted_experience or []
+
         if len(experience) == 0:
+
             feedback.append({
+
                 "reason": "No work experience detected",
+
                 "suggestion": "Add internships, freelance work, or relevant work experience."
+
             })
 
+
+
         # --------------------------------------------------
+
         # 6. PROJECT CHECK
-        # --------------------------------------------------
-        projects = resume.extracted_projects or []
-        if len(projects) < 1:
-            feedback.append({
-                "reason": "No technical projects found",
-                "suggestion": "Add projects demonstrating technologies you used."
-            })
 
         # --------------------------------------------------
-        # 7. ATS STRUCTURE CHECK
+
+        projects = resume.extracted_projects or []
+
+        if len(projects) < 1:
+
+            feedback.append({
+
+                "reason": "No technical projects found",
+
+                "suggestion": "Add projects demonstrating technologies you used."
+
+            })
+
+
+
         # --------------------------------------------------
+
+        # 7. ATS STRUCTURE CHECK
+
+        # --------------------------------------------------
+
         required_sections = ["skills", "education", "experience"]
 
+
+
         missing_sections = []
+
         for sec in required_sections:
+
             if sec not in text and sec + "s" not in text:
+
                 missing_sections.append(sec)
 
+
+
         if missing_sections:
+
             feedback.append({
+
                 "reason": "Resume structure not ATS optimized",
+
                 "suggestion": f"Add clear sections like {', '.join(missing_sections)}."
+
             })
+
+
 
         return feedback
 
 
 
+
+
+
+
 class ResumeListView(generics.ListAPIView):
+
     """List user's resumes"""
+
     serializer_class = ResumeDetailSerializer
+
     permission_classes = [permissions.IsAuthenticated]
+
     
+
     def get_queryset(self):
+
         return Resume.objects.filter(user=self.request.user)
+
+
+
 
 
 class ResumeDetailView(generics.RetrieveUpdateDestroyAPIView):
+
     """Resume detail view"""
+
     serializer_class = ResumeDetailSerializer
+
     permission_classes = [permissions.IsAuthenticated]
+
     
+
     def get_queryset(self):
+
         return Resume.objects.filter(user=self.request.user)
 
 
+
+
+
 class SkillProfileView(generics.RetrieveUpdateAPIView):
+
     """User skill profile view"""
+
     serializer_class = SkillProfileSerializer
+
     permission_classes = [permissions.IsAuthenticated]
+
     
+
     def get_object(self):
+
         profile, created = SkillProfile.objects.get_or_create(user=self.request.user)
+
         return profile
 
 
+
+
+
 @api_view(['GET'])
+
 @permission_classes([permissions.IsAuthenticated])
+
 def resume_analysis(request, resume_id):
+
     """Get detailed analysis for a specific resume"""
+
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+
     
+
     try:
+
         analysis = resume.analysis
+
         serializer = ResumeAnalysisSerializer(analysis)
+
         return Response(serializer.data)
+
     except ResumeAnalysis.DoesNotExist:
+
         return Response(
+
             {'error': 'Analysis not found for this resume'},
+
             status=status.HTTP_404_NOT_FOUND
+
         )
+
+
+
 
 
 @api_view(['POST'])
+
 @permission_classes([permissions.IsAuthenticated])
+
 def reprocess_resume(request, resume_id):
+
     """Reprocess a resume (useful for debugging or updated parsing logic)"""
+
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+
     
+
     try:
+
         # Reset processing status
+
         resume.processing_status = 'pending'
+
         resume.error_message = None
+
         resume.save()
+
         
+
         # Reprocess
+
         upload_view = ResumeUploadView()
+
         upload_view._process_resume(resume)
+
         
+
         return Response({
+
             'message': 'Resume reprocessed successfully',
+
             'status': resume.processing_status
+
         })
+
     except Exception as e:
+
         resume.processing_status = 'failed'
+
         resume.error_message = str(e)
+
         resume.save()
+
         return Response(
+
             {'error': f'Failed to reprocess resume: {str(e)}'},
+
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+
         )
+
+
+class SkillGapAnalysisView(generics.RetrieveAPIView):
+    """Get skill gap analysis for a specific job application"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        print(f"SkillGapAnalysisView called with query params: {request.query_params}")
+        user = request.user
+        job_id = request.query_params.get('job_id')
+        
+        print(f"User: {user}, Job ID: {job_id}")
+        
+        if not job_id:
+            print("No job_id provided")
+            return Response({'error': 'job_id parameter is required'}, status=400)
+        
+        # Get user's latest resume
+        resume = Resume.objects.filter(user=user).order_by('-created_at').first()
+        if not resume:
+            print("No resume found for user")
+            return Response({'error': 'No resume found'}, status=404)
+        
+        print(f"Found resume: {resume.id}, skills: {resume.extracted_skills}")
+        
+        # Get job details
+        try:
+            from jobs.models import Job
+            job = Job.objects.get(id=job_id, is_active=True)
+        except Job.DoesNotExist:
+            print(f"Job {job_id} not found")
+            return Response({'error': 'Job not found'}, status=404)
+        
+        print(f"Found job: {job.title}, required skills: {job.required_skills}")
+        
+        # Extract skills from resume and job
+        resume_skills = resume.extracted_skills or []
+        job_required_skills = job.required_skills or []
+        
+        # Calculate skill gaps
+        from .utils import find_skill_gap
+        missing_skills = find_skill_gap(resume_skills, job_required_skills)
+        
+        print(f"Resume skills: {resume_skills}")
+        print(f"Job required skills: {job_required_skills}")
+        print(f"Missing skills: {missing_skills}")
+        
+        # Calculate match percentage
+        if job_required_skills:
+            matched_skills = [skill for skill in resume_skills if skill.lower() in [s.lower() for s in job_required_skills]]
+            match_percentage = round((len(matched_skills) / len(job_required_skills)) * 100, 1)
+        else:
+            matched_skills = []
+            match_percentage = 0
+        
+        print(f"Matched skills: {matched_skills}, Match percentage: {match_percentage}")
+        
+        # Generate upskilling suggestions
+        suggestions = []
+        for skill in missing_skills[:5]:  # Top 5 missing skills
+            suggestions.append({
+                'skill_name': skill,
+                'priority': 'high',
+                'difficulty': 'intermediate',
+                'estimated_time': '2-4 weeks',
+                'resources': [
+                    {'name': 'Coursera', 'url': f'https://www.coursera.org/search?query={skill}'},
+                    {'name': 'Udemy', 'url': f'https://www.udemy.com/courses/search/?q={skill}'},
+                    {'name': 'LinkedIn Learning', 'url': f'https://www.linkedin.com/learning/search?keywords={skill}'}
+                ]
+            })
+        
+        result = {
+            'resume_id': resume.id,
+            'job_id': job.id,
+            'job_title': job.title,
+            'resume_title': resume.title,
+            'candidate_skills': resume_skills,
+            'required_skills': job_required_skills,
+            'matched_skills': matched_skills,
+            'missing_skills': missing_skills,
+            'match_percentage': match_percentage,
+            'total_candidate_skills': len(resume_skills),
+            'total_required_skills': len(job_required_skills),
+            'upskilling_suggestions': suggestions,
+            'analysis_summary': {
+                'strengths': f"You have {len(matched_skills)} out of {len(job_required_skills)} required skills",
+                'gaps': f"Missing {len(missing_skills)} key skills",
+                'recommendation': 'Focus on learning missing skills to improve match percentage'
+            }
+        }
+        
+        print(f"Returning result: {result}")
+        return Response(result)

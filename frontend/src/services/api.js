@@ -62,6 +62,7 @@ export const resumeAPI = {
   reprocess: (id) => api.post(`/resumes/${id}/reprocess/`),
   getSkillProfile: () => api.get('/resumes/skill-profile/'),
   updateSkillProfile: (data) => api.put('/resumes/skill-profile/', data),
+  getSkillGapAnalysis: (jobId) => api.get(`/resumes/skill-gap/?job_id=${jobId}`),
 };
 
 // Jobs API

@@ -1,256 +1,554 @@
-import React from 'react';
-import { Card, Typography, List, Tag, Progress, Button, Space, Empty, Row, Col } from 'antd';
+import React, { useState, useEffect } from 'react';
 import { 
-  BulbOutlined, 
+  Card, 
+  Typography, 
+  Row, 
+  Col, 
+  Progress, 
+  Button, 
+  Space, 
+  Empty, 
+  Alert,
+  Spin,
+  List,
+  Tag
+} from 'antd';
+import { 
+  CheckCircleOutlined, 
+  CloseCircleOutlined, 
   BookOutlined, 
-  ClockCircleOutlined,
-  TrophyOutlined,
-  CheckCircleOutlined
+  BulbOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import { useQuery } from 'react-query';
-import { mlAPI } from '../../services/api';
+import { resumeAPI, jobsAPI } from '../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 
 const SkillGap = () => {
-  // Fetch upskilling suggestions
-  const { data: suggestions, isLoading } = useQuery(
-    'upskilling-suggestions',
-    mlAPI.getUpskillingSuggestions,
+  const [selectedJobId, setSelectedJobId] = useState(null);
+  const [error, setError] = useState(null);
+  const [autoAnalyzed, setAutoAnalyzed] = useState(false);
+  
+  // Fetch user's jobs
+  const { data: jobsResponse, isLoading: jobsLoading, error: jobsError } = useQuery(
+    'jobs-list',
+    () => jobsAPI.getList(),
     {
-      select: (response) =>
-        Array.isArray(response?.data?.results)
-          ? response.data.results
-          : response?.data || [],
+      select: (response) => {
+        console.log('Jobs API Response:', response); // Debug log
+        console.log('Response type:', typeof response); // Debug log
+        console.log('Is array:', Array.isArray(response)); // Debug log
+        
+        // Handle different response structures
+        if (Array.isArray(response)) {
+          console.log('Response is array, returning directly');
+          return response;
+        }
+        if (response?.data && Array.isArray(response.data)) {
+          console.log('Response.data is array, returning response.data');
+          return response.data;
+        }
+        if (response?.results && Array.isArray(response.results)) {
+          console.log('Response.results is array, returning response.results');
+          return response.results;
+        }
+        if (response?.results?.data && Array.isArray(response.results.data)) {
+          console.log('Response.results.data is array, returning response.results.data');
+          return response.results.data;
+        }
+        
+        // Check if response.data is an object with array-like structure
+        if (response?.data && typeof response.data === 'object') {
+          console.log('Response.data is object, checking for array properties');
+          // Look for common array property names
+          const possibleArrays = ['results', 'jobs', 'data', 'items'];
+          for (const prop of possibleArrays) {
+            if (response.data[prop] && Array.isArray(response.data[prop])) {
+              console.log(`Found array in response.data.${prop}`);
+              return response.data[prop];
+            }
+          }
+          
+          // If data is an array-like object (has numeric keys)
+          const dataKeys = Object.keys(response.data);
+          if (dataKeys.length > 0 && !isNaN(dataKeys[0])) {
+            console.log('Converting object to array');
+            return Object.values(response.data);
+          }
+        }
+        
+        console.log('No array found, returning empty array');
+        return [];
+      }
     }
   );
 
-  const getPriorityColor = (score) => {
-    if (score >= 80) return '#f5222d';
-    if (score >= 60) return '#fa8c16';
-    if (score >= 40) return '#1890ff';
-    return '#52c41a';
+  // Auto-select first applied job if available
+  useEffect(() => {
+    if (jobsResponse && jobsResponse.length > 0 && !autoAnalyzed) {
+      console.log('All jobs:', jobsResponse); // Debug all jobs
+      console.log('Job structure:', jobsResponse[0]); // Debug job structure
+      
+      // Find first job that has been applied for
+      const appliedJob = jobsResponse.find(job => {
+        console.log('Checking job:', job.id, job.title, 'status:', job.status, 'applied:', job.applied, 'application_status:', job.application_status);
+        return job.status === 'applied' || job.applied === true || job.application_status === 'applied';
+      });
+      
+      if (appliedJob) {
+        console.log('Auto-selecting applied job:', appliedJob);
+        setSelectedJobId(appliedJob.id);
+        setAutoAnalyzed(true);
+      } else if (jobsResponse.length > 0) {
+        // If no applied jobs, select first available job
+        console.log('No applied jobs found, selecting first job:', jobsResponse[0]);
+        setSelectedJobId(jobsResponse[0].id);
+        setAutoAnalyzed(true);
+      }
+    }
+  }, [jobsResponse, autoAnalyzed]);
+
+  // Debug logs
+  console.log('Jobs Loading:', jobsLoading);
+  console.log('Jobs Error:', jobsError);
+  console.log('Jobs Response:', jobsResponse);
+
+  // Fetch skill gap analysis
+  const { 
+    data: skillGapData, 
+    isLoading: skillGapLoading, 
+    error: skillGapError 
+  } = useQuery(
+    ['skill-gap-analysis', selectedJobId],
+    () => {
+      console.log('Making skill gap API call for job ID:', selectedJobId);
+      return selectedJobId ? resumeAPI.getSkillGapAnalysis(selectedJobId) : null;
+    },
+    {
+      enabled: !!selectedJobId && !error, // Only fetch when job is selected and no validation error
+      select: (response) => {
+        console.log('Skill gap API response:', response); // Debug response
+        return response?.data || {};
+      },
+      onSuccess: (data) => {
+        console.log('Skill gap data loaded:', data); // Debug loaded data
+      },
+      onError: (error) => {
+        console.log('Skill gap API error:', error); // Debug errors
+      }
+    }
+  );
+
+  const getMatchColor = (percentage) => {
+    if (percentage >= 80) return '#52c41a';
+    if (percentage >= 60) return '#faad14';
+    if (percentage >= 40) return '#1890ff';
+    return '#f5222d';
   };
 
-  const getDifficultyColor = (difficulty) => {
+  const getPriorityColor = (priority) => {
     const colors = {
-      beginner: '#52c41a',
-      intermediate: '#1890ff',
-      advanced: '#722ed1',
+      high: '#f5222d',
+      medium: '#fa8c16',
+      low: '#52c41a',
     };
-    return colors[difficulty] || '#d9d9d9';
+    return colors[priority] || '#d9d9d9';
   };
 
-  const getCompletionStatus = (suggestion) => {
-    if (suggestion.is_completed) return 'completed';
-    if (suggestion.completion_percentage > 0) return 'in-progress';
-    return 'not-started';
+  const handleAnalyze = () => {
+    if (!selectedJobId) {
+      setError("Please select a job to analyze");
+      return;
+    }
+    setError(null);
+    // Analysis will trigger automatically due to selectedJobId dependency
   };
+
+  const downloadReport = () => {
+    if (!skillGapData) return;
+    
+    const report = {
+      job_title: skillGapData.job_title,
+      resume_title: skillGapData.resume_title,
+      match_percentage: skillGapData.match_percentage,
+      candidate_skills: skillGapData.candidate_skills,
+      required_skills: skillGapData.required_skills,
+      missing_skills: skillGapData.missing_skills,
+      analysis_summary: skillGapData.analysis_summary,
+      generated_at: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `skill-gap-analysis-${skillGapData.job_id}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (jobsLoading) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center' }}>
+        <Spin size="large" />
+        <Text style={{ marginLeft: '16px' }}>Loading available jobs...</Text>
+      </div>
+    );
+  }
+
+  if (jobsError) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center' }}>
+        <Alert
+          message="Error Loading Jobs"
+          description={jobsError.message || 'Failed to load jobs. Please try refreshing the page.'}
+          type="error"
+          showIcon
+          action={
+            <Button size="small" onClick={() => window.location.reload()}>
+              Refresh Page
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  console.log('Jobs Response:', jobsResponse); // Debug log
 
   return (
-    <div>
-      <div className="page-header">
-        <Title level={2}>Skill Gap Analysis</Title>
+    <div style={{ padding: '24px', background: '#f5f5f5', minHeight: '100vh' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '24px' }}>
+        <Title level={2}>
+          <BookOutlined /> Skill Gap Analysis
+          {autoAnalyzed && selectedJobId && (
+            <Tag color="green" style={{ marginLeft: '12px', fontSize: '12px' }}>
+              Auto-Analyzed
+            </Tag>
+          )}
+        </Title>
         <Text type="secondary">
-          Identify and improve skills needed for your target jobs
+          Compare your resume skills with job requirements and identify skill gaps
+          {autoAnalyzed && selectedJobId && (
+            <span style={{ marginLeft: '8px', color: '#52c41a' }}>
+              (Analysis automatically triggered for your applied job)
+            </span>
+          )}
         </Text>
       </div>
 
-      <div className="content-wrapper">
-        {isLoading ? (
-          <div className="loading-container">
-            Loading skill analysis...
-          </div>
-        ) : !suggestions || suggestions.length === 0 ? (
-          <Empty
-            description="No skill gap analysis available"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          >
-            <Button type="primary" href="/candidate/resume-upload">
-              Upload Resume First
-            </Button>
-          </Empty>
-        ) : (
-          <Row gutter={[16, 16]}>
-            {/* Overview Stats */}
-            <Col xs={24} lg={8}>
-              <Card title="Learning Overview">
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <div>
-                    <Title level={4}>
-                      {suggestions.filter(s => s.is_completed).length}
-                    </Title>
-                    <Text type="secondary">Skills Completed</Text>
-                  </div>
-                  <div>
-                    <Title level={4}>
-                      {suggestions.filter(s => s.completion_percentage > 0 && !s.is_completed).length}
-                    </Title>
-                    <Text type="secondary">In Progress</Text>
-                  </div>
-                  <div>
-                    <Title level={4}>
-                      {suggestions.filter(s => s.completion_percentage === 0).length}
-                    </Title>
-                    <Text type="secondary">Not Started</Text>
-                  </div>
-                  <div>
-                    <Title level={4}>
-                      {Math.round(suggestions.reduce((acc, s) => acc + s.completion_percentage, 0) / suggestions.length)}%
-                    </Title>
-                    <Text type="secondary">Overall Progress</Text>
-                  </div>
-                </Space>
-              </Card>
-            </Col>
-
-            {/* Skill Suggestions */}
-            <Col xs={24} lg={16}>
-              <Card title="Recommended Skills to Learn">
-                <List
-                  dataSource={suggestions}
-                  renderItem={(suggestion) => {
-                    const status = getCompletionStatus(suggestion);
-                    return (
-                      <List.Item>
-                        <Card size="small" className="skill-gap-item">
-                          <Row gutter={[16, 16]}>
-                            <Col xs={24} md={12}>
-                              <div>
-                                <Title level={5} style={{ marginBottom: 8 }}>
-                                  {suggestion.skill_name}
-                                  {status === 'completed' && (
-                                    <CheckCircleOutlined 
-                                      style={{ color: '#52c41a', marginLeft: 8 }} 
-                                    />
-                                  )}
-                                </Title>
-                                
-                                <Space wrap style={{ marginBottom: 8 }}>
-                                  <Tag color={getDifficultyColor(suggestion.difficulty_level)}>
-                                    {suggestion.difficulty_level}
-                                  </Tag>
-                                  <Tag color={getPriorityColor(suggestion.priority_score)}>
-                                    Priority: {suggestion.priority_score.toFixed(0)}
-                                  </Tag>
-                                  <Tag icon={<ClockCircleOutlined />}>
-                                    {suggestion.estimated_time_hours}h
-                                  </Tag>
-                                </Space>
-
-                                <Paragraph type="secondary" style={{ marginBottom: 12 }}>
-                                  Current: {suggestion.current_level} → Target: {suggestion.target_level}
-                                </Paragraph>
-
-                                {status !== 'completed' && (
-                                  <div style={{ marginBottom: 12 }}>
-                                    <Text strong>Progress: </Text>
-                                    <Progress 
-                                      percent={suggestion.completion_percentage} 
-                                      size="small"
-                                      style={{ width: '200px', marginLeft: 8 }}
-                                    />
-                                  </div>
-                                )}
-
-                                <Space>
-                                  {status === 'not-started' && (
-                                    <Button type="primary" size="small">
-                                      Start Learning
-                                    </Button>
-                                  )}
-                                  {status === 'in-progress' && (
-                                    <Button size="small">
-                                      Continue Learning
-                                    </Button>
-                                  )}
-                                  {status === 'completed' && (
-                                    <Tag color="success">Completed</Tag>
-                                  )}
-                                </Space>
-                              </div>
-                            </Col>
-
-                            <Col xs={24} md={12}>
-                              <div>
-                                <Title level={5}>
-                                  <BookOutlined style={{ marginRight: 8 }} />
-                                  Learning Resources
-                                </Title>
-                                
-                                {suggestion.learning_resources && suggestion.learning_resources.length > 0 ? (
-                                  <List
-                                    size="small"
-                                    dataSource={suggestion.learning_resources}
-                                    renderItem={(resource) => (
-                                      <List.Item>
-                                        <div style={{ width: '100%' }}>
-                                          <div style={{ fontWeight: 500 }}>
-                                            {resource.title}
-                                          </div>
-                                          <Space>
-                                            <Tag size="small">{resource.type}</Tag>
-                                            <Text type="secondary">{resource.provider}</Text>
-                                            <Text type="secondary">{resource.duration}</Text>
-                                            {resource.rating && (
-                                              <Text type="secondary">⭐ {resource.rating}</Text>
-                                            )}
-                                          </Space>
-                                        </div>
-                                      </List.Item>
-                                    )}
-                                  />
-                                ) : (
-                                  <Text type="secondary">No resources available</Text>
-                                )}
-                              </div>
-                            </Col>
-                          </Row>
-                        </Card>
-                      </List.Item>
-                    );
+      {/* Job Selection */}
+      <Card style={{ marginBottom: '24px' }}>
+        <Title level={4}>
+          <BulbOutlined /> Select Job to Analyze
+        </Title>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={8}>
+            {jobsResponse && jobsResponse.length > 0 ? (
+              <>
+                <select
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    border: `1px solid ${error ? '#f5222d' : '#d9d9d9'}`, 
+                    borderRadius: '6px',
+                    outline: error ? '2px solid #f5222d' : 'none'
                   }}
+                  onChange={(e) => {
+                    setSelectedJobId(e.target.value);
+                    setError(null); // Clear error when selection changes
+                  }}
+                  value={selectedJobId || ''}
+                >
+                  <option value="">Select a job...</option>
+                  {jobsResponse?.map(job => (
+                    <option key={job.id} value={job.id}>
+                      {job.title} - {job.company}
+                    </option>
+                  ))}
+                </select>
+                
+                {/* Error Message */}
+                {error && (
+                  <div style={{ 
+                    marginTop: '8px', 
+                    color: '#f5222d', 
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    {error}
+                  </div>
+                )}
+                
+                {/* Analyze Button */}
+                <Button 
+                  type="primary" 
+                  onClick={handleAnalyze}
+                  style={{ 
+                    marginTop: '12px', 
+                    width: '100%',
+                    backgroundColor: selectedJobId ? '#1890ff' : '#d9d9d9',
+                    borderColor: selectedJobId ? '#1890ff' : '#d9d9d9'
+                  }}
+                  disabled={!selectedJobId}
+                >
+                  Analyze Skill Gap
+                </Button>
+              </>
+            ) : (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                <Text type="secondary">
+                  No jobs available. Please check back later or upload a resume to get job recommendations.
+                </Text>
+              </div>
+            )}
+          </Col>
+        </Row>
+      </Card>
+
+      {/* Skill Gap Analysis Results */}
+      {selectedJobId && skillGapLoading && (
+        <Card style={{ textAlign: 'center', padding: '40px' }}>
+          <Spin size="large" />
+          <Text>Analyzing skill gaps...</Text>
+        </Card>
+      )}
+
+      {selectedJobId && skillGapError && (
+        <Alert
+          message="Error loading skill gap analysis"
+          description={skillGapError.message}
+          type="error"
+          style={{ marginBottom: '24px' }}
+        />
+      )}
+
+      {selectedJobId && skillGapData && (
+        <>
+          {/* Match Overview */}
+          <Card style={{ marginBottom: '24px' }}>
+            <Row gutter={[16, 16]} align="middle">
+              <Col xs={24} md={12}>
+                <Title level={4}>
+                  <CheckCircleOutlined /> Match Overview
+                </Title>
+                <Progress
+                  type="circle"
+                  percent={skillGapData.match_percentage}
+                  strokeColor={getMatchColor(skillGapData.match_percentage)}
+                  size={120}
+                  format={percent => (
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                        {percent}%
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#666' }}>
+                        Skills Match
+                      </div>
+                    </div>
+                  )}
                 />
+              </Col>
+              <Col xs={24} md={12}>
+                <div>
+                  <Title level={5}>Analysis Summary</Title>
+                  <Paragraph>
+                    <Text strong>Strengths: </Text>
+                    {skillGapData.analysis_summary?.strengths}
+                  </Paragraph>
+                  <Paragraph>
+                    <Text strong>Gaps: </Text>
+                    <Text type="danger">{skillGapData.analysis_summary?.gaps}</Text>
+                  </Paragraph>
+                  <Paragraph>
+                    <Text strong>Recommendation: </Text>
+                    {skillGapData.analysis_summary?.recommendation}
+                  </Paragraph>
+                </div>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* Skills Comparison */}
+          <Row gutter={[16, 16]}>
+            {/* Candidate Skills */}
+            <Col xs={24} lg={8}>
+              <Card 
+                title={
+                  <span>
+                    <CheckCircleOutlined style={{ color: '#52c41a' }} /> 
+                    Your Skills ({skillGapData.total_candidate_skills})
+                  </span>
+                }
+                style={{ height: '400px' }}
+              >
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {skillGapData.candidate_skills?.length > 0 ? (
+                    <div>
+                      {skillGapData.candidate_skills.map((skill, index) => (
+                        <Tag 
+                          key={index} 
+                          color="green" 
+                          style={{ margin: '4px 4px 4px 0' }}
+                        >
+                          {skill}
+                        </Tag>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty description="No skills found in resume" />
+                  )}
+                </div>
               </Card>
             </Col>
 
-            {/* Learning Tips */}
-            <Col xs={24}>
-              <Card title="Learning Tips & Best Practices">
-                <Row gutter={[16, 16]}>
-                  <Col xs={24} md={8}>
-                    <Card size="small">
-                      <BulbOutlined style={{ fontSize: 24, color: '#1890ff', marginBottom: 8 }} />
-                      <Title level={5}>Start with High Priority</Title>
-                      <Paragraph type="secondary">
-                        Focus on skills with the highest priority scores first, as these are most in-demand for your target jobs.
-                      </Paragraph>
-                    </Card>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Card size="small">
-                      <TrophyOutlined style={{ fontSize: 24, color: '#52c41a', marginBottom: 8 }} />
-                      <Title level={5}>Track Your Progress</Title>
-                      <Paragraph type="secondary">
-                        Update your progress regularly to see how you're improving and stay motivated.
-                      </Paragraph>
-                    </Card>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Card size="small">
-                      <BookOutlined style={{ fontSize: 24, color: '#722ed1', marginBottom: 8 }} />
-                      <Title level={5}>Use Multiple Resources</Title>
-                      <Paragraph type="secondary">
-                        Combine different learning materials like courses, tutorials, and projects for better understanding.
-                      </Paragraph>
-                    </Card>
-                  </Col>
-                </Row>
+            {/* Required Skills */}
+            <Col xs={24} lg={8}>
+              <Card 
+                title={
+                  <span>
+                    <BookOutlined style={{ color: '#1890ff' }} /> 
+                    Required Skills ({skillGapData.total_required_skills})
+                  </span>
+                }
+                style={{ height: '400px' }}
+              >
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {skillGapData.required_skills?.length > 0 ? (
+                    <div>
+                      {skillGapData.required_skills.map((skill, index) => (
+                        <Tag 
+                          key={index} 
+                          color="blue" 
+                          style={{ margin: '4px 4px 4px 0' }}
+                        >
+                          {skill}
+                        </Tag>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty description="No required skills specified" />
+                  )}
+                </div>
+              </Card>
+            </Col>
+
+            {/* Missing Skills */}
+            <Col xs={24} lg={8}>
+              <Card 
+                title={
+                  <span>
+                    <CloseCircleOutlined style={{ color: '#f5222d' }} /> 
+                    Missing Skills ({skillGapData.missing_skills?.length || 0})
+                  </span>
+                }
+                style={{ height: '400px' }}
+              >
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {skillGapData.missing_skills?.length > 0 ? (
+                    <div>
+                      {skillGapData.missing_skills.map((skill, index) => (
+                        <Tag 
+                          key={index} 
+                          color="red" 
+                          style={{ 
+                            margin: '4px 4px 4px 0',
+                            fontWeight: 'bold',
+                            border: '2px solid #ff4d4f'
+                          }}
+                        >
+                          {skill}
+                        </Tag>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty 
+                      description="No missing skills! Great match!" 
+                      style={{ color: '#52c41a' }}
+                    />
+                  )}
+                </div>
               </Card>
             </Col>
           </Row>
-        )}
-      </div>
+
+          {/* Upskilling Suggestions */}
+          {skillGapData.missing_skills?.length > 0 && (
+            <Card 
+              title={
+                <span>
+                  <BulbOutlined /> 
+                  Upskilling Suggestions
+                </span>
+              }
+              extra={
+                <Button 
+                  type="primary" 
+                  icon={<DownloadOutlined />}
+                  onClick={downloadReport}
+                >
+                  Download Report
+                </Button>
+              }
+            >
+              <List
+                dataSource={skillGapData.upskilling_suggestions}
+                renderItem={(suggestion) => (
+                  <List.Item>
+                    <List.Item.Meta
+                      title={
+                        <Space>
+                          <Tag color={getPriorityColor(suggestion.priority)}>
+                            {suggestion.priority.toUpperCase()}
+                          </Tag>
+                          <Text strong>{suggestion.skill_name}</Text>
+                        </Space>
+                      }
+                      description={
+                        <div>
+                          <Text type="secondary">
+                            Difficulty: {suggestion.difficulty} | 
+                            Estimated Time: {suggestion.estimated_time}
+                          </Text>
+                          <div style={{ marginTop: '8px' }}>
+                            <Text strong>Learning Resources:</Text>
+                            <div style={{ marginTop: '4px' }}>
+                              {suggestion.resources.map((resource, index) => (
+                                <Button
+                                  key={index}
+                                  type="link"
+                                  size="small"
+                                  href={resource.url}
+                                  target="_blank"
+                                  style={{ padding: '0 4px' }}
+                                >
+                                  {resource.name}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* No Job Selected */}
+      {!selectedJobId && (
+        <Card style={{ textAlign: 'center', padding: '40px' }}>
+          <Empty
+            description="Please select a job to analyze skill gaps"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </Card>
+      )}
     </div>
   );
 };

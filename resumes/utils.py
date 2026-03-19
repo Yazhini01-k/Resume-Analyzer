@@ -149,13 +149,11 @@ class ResumeParser:
         return unique_skills
 
     def _extract_education(self, text):
-        """Extract education details — handles both single-line and multi-line formats."""
+        """Extract education details."""
 
         education = []
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         lines = [line.strip() for line in text.split("\n")]
-
-        # ── Patterns ──────────────────────────────────────────────────────────────
 
         DEGREE_RE = re.compile(
             r"\b(?:"
@@ -176,14 +174,12 @@ class ResumeParser:
             re.IGNORECASE,
         )
 
-        # Handles: "2022 – 2026", "2022-2026", "2022 to 2026"
         YEAR_RE = re.compile(
             r"((?:19|20)\d{2})\s*(?:[-–—\u2013\u2014]|to)\s*((?:19|20)\d{2}|present|current|now)"
             r"|((?:19|20)\d{2})",
             re.IGNORECASE,
         )
 
-        # Handles: "Aug 2020 - May 2024"
         MONTH_YEAR_RE = re.compile(
             r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
             r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
@@ -215,7 +211,6 @@ class ResumeParser:
             re.IGNORECASE,
         )
 
-        # Catches GPA, CGPA, OGPA
         GPA_RE = re.compile(
             r"\b(?:o?gpa|cgpa|grade\s+point)\s*[:\-]?\s*(\d+\.\d+(?:\s*/\s*\d+\.\d+)?)",
             re.IGNORECASE,
@@ -243,12 +238,11 @@ class ResumeParser:
             r'\s*[,\-]?\s*\b(?:chennai|mumbai|delhi|bangalore|bengaluru|hyderabad|pune|kolkata'
             r'|chidambaram|coimbatore|madurai|trichy|tiruchirappalli|salem|vellore|erode'
             r'|tirunelveli|thoothukudi|tuticorin|kanchipuram|tiruppur|nagercoil|thanjavur'
+            r'|pondicherry|puducherry|tiruvannamalai|dover'
             r'|tamil\s+nadu|maharashtra|karnataka|kerala|andhra\s+pradesh|telangana'
             r'|india|usa|uk|remote)\b.*$',
             re.IGNORECASE
         )
-
-        # ── 1. Section boundary detection ─────────────────────────────────────────
 
         START_HEADERS = re.compile(
             r"\b(?:education(?:al)?(?:\s+(?:background|history|qualifications?|summary))?"
@@ -282,13 +276,10 @@ class ResumeParser:
         if not section_lines:
             section_lines = [l for l in lines if l]
 
-        # ── 2. Helper functions ────────────────────────────────────────────────────
-
         def clean_location(value):
             return LOCATION_NOISE.sub("", value).strip(" ,;-–")
 
         def extract_year(line):
-            """Try month+year range first, then plain year range, then single year."""
             my = MONTH_YEAR_RE.search(line)
             if my:
                 return my.group().strip()
@@ -303,8 +294,6 @@ class ResumeParser:
 
         def line_has_year(line):
             return bool(YEAR_RE.search(line) or MONTH_YEAR_RE.search(line))
-
-        # ── 3. Smart block splitting ───────────────────────────────────────────────
 
         blocks = []
         current = []
@@ -328,7 +317,6 @@ class ResumeParser:
                 lhas_institution = bool(INSTITUTION_KEYWORDS.search(line))
                 lhas_gpa = bool(GPA_RE.search(line))
 
-                # Institution/year line (no degree) → group with next line
                 if (lhas_year or lhas_institution) and not lhas_degree:
                     group = [line]
                     if i + 1 < len(section_lines):
@@ -337,28 +325,21 @@ class ResumeParser:
                     else:
                         i += 1
                     blocks.append(group)
-
-                # GPA/year-only line → attach to previous block
                 elif lhas_gpa and not lhas_degree and not lhas_institution:
                     if blocks:
                         blocks[-1].append(line)
                     else:
                         blocks.append([line])
                     i += 1
-
-                # Degree-only line → attach to previous block
                 elif lhas_degree and not lhas_year and not lhas_institution:
                     if blocks:
                         blocks[-1].append(line)
                     else:
                         blocks.append([line])
                     i += 1
-
                 else:
                     blocks.append([line])
                     i += 1
-
-        # ── 4. Parse each block ────────────────────────────────────────────────────
 
         def parse_block(block_lines):
             full_text = " ".join(block_lines)
@@ -366,7 +347,6 @@ class ResumeParser:
 
             if not DEGREE_RE.search(full_lower):
                 return None
-
             if SCHOOL_ONLY_RE.search(full_text) and not INSTITUTION_RE.search(full_text):
                 return None
 
@@ -376,7 +356,6 @@ class ResumeParser:
             for line in block_lines:
                 line_lower = line.lower()
 
-                # Degree
                 if not entry["degree"]:
                     dm = DEGREE_RE.search(line_lower)
                     if dm:
@@ -387,23 +366,19 @@ class ResumeParser:
                         raw = clean_location(raw)
                         entry["degree"] = raw
 
-                # Year
                 if not entry["year"]:
                     entry["year"] = extract_year(line)
 
-                # GPA
                 gm = GPA_RE.search(line)
                 if gm and not entry["gpa"]:
                     entry["gpa"] = gm.group(1)
 
-                # Institution
                 if not entry["institution"] and line.strip() != degree_line:
                     line_no_year = YEAR_RE.sub("", MONTH_YEAR_RE.sub("", line)).strip(" –-—")
                     im = INSTITUTION_RE.search(line_no_year)
                     if im:
                         entry["institution"] = clean_location(im.group().strip())
 
-            # Institution keyword fallback
             if not entry["institution"]:
                 best_line, best_score = "", 0
                 for ln in block_lines:
@@ -420,7 +395,6 @@ class ResumeParser:
                     else:
                         entry["institution"] = clean_location(cleaned.split(",")[0].strip())
 
-            # spaCy fallback
             if not entry["institution"] and hasattr(self, "nlp"):
                 doc = self.nlp(full_text)
                 for ent in doc.ents:
@@ -429,7 +403,6 @@ class ResumeParser:
                             entry["institution"] = ent.text
                             break
 
-            # Field of study
             for source in [degree_line, full_text]:
                 if entry["field_of_study"]:
                     break
@@ -447,12 +420,9 @@ class ResumeParser:
 
             return entry if (entry["degree"] or entry["institution"]) else None
 
-        # ── 5. Process all blocks ──────────────────────────────────────────────────
-
         for block in blocks:
             result = parse_block(block)
             if result:
-                # Safety net: if year or gpa still missing, scan ALL section lines
                 if not result["year"] or not result["gpa"]:
                     for line in section_lines:
                         if not result["year"]:
@@ -467,7 +437,6 @@ class ResumeParser:
                             break
                 education.append(result)
 
-        # ── 6. Deduplicate ─────────────────────────────────────────────────────────
         unique = []
         seen = set()
         for edu in education:
@@ -479,29 +448,24 @@ class ResumeParser:
         return unique
 
     def _extract_experience(self, text):
-        print("=== EXPERIENCE SECTION ===")
-        idx = text.lower().find("experience")
-        if idx != -1:
-            print(text[idx:idx+800])  # more text
-        else:
-            print("NO EXPERIENCE SECTION FOUND")
-            print("==========================")
-            """Extract work experience from resume text."""
+        """Extract work experience — handles company-first and title-first layouts."""
 
         experience = []
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         lines = [line.strip() for line in text.split("\n")]
 
-        START_HEADERS = re.compile(
-            r"\b(?:(?:work|professional|career|employment|job)\s*(?:experience|history|background|summary)?"
-            r"|internships?$|positions?\s+(?:of\s+)?(?:responsibility|held))\b",
-            re.IGNORECASE,
-        )
+        EXPERIENCE_HEADERS = {
+            'experience', 'work experience', 'internships', 'internship',
+            'professional experience', 'employment history', 'work history',
+            'career history', 'positions of responsibility'
+        }
 
         END_HEADERS = re.compile(
-            r"\b(?:education|academic|qualification|technolog|project|skill|competenc"
-            r"|certification|publication|award|honor|activit|interest|language|reference"
-            r"|summary|objective|profile|volunteer|achievement|additional)\b",
+            r"^(?:education|academic|qualification|technical\s+skills?|skills?"
+            r"|technologies|tools|projects?|certifications?|publications?"
+            r"|awards?|honors?|activities|interests|languages?|references?"
+            r"|summary|objective|profile|volunteer|achievements?|additional"
+            r"|extra.curricular|hobbies|additionals?)\s*$",
             re.IGNORECASE,
         )
 
@@ -509,18 +473,30 @@ class ResumeParser:
         section_lines = []
 
         for line in lines:
-            lower = line.lower().strip()
+            lower = line.strip().lower()
             if not in_section:
-                if len(line) < 50 and START_HEADERS.search(lower):
+                if lower in EXPERIENCE_HEADERS:
                     in_section = True
                     continue
             else:
-                if lower and len(line) < 50 and END_HEADERS.search(lower):
+                if lower and len(line.strip()) < 40 and END_HEADERS.match(lower):
                     break
                 section_lines.append(line)
 
         if not section_lines:
-            section_lines = [l for l in lines if l]
+            for i, line in enumerate(lines):
+                if line.strip().lower() in EXPERIENCE_HEADERS:
+                    for subsequent in lines[i + 1:]:
+                        slow = subsequent.strip().lower()
+                        if slow and len(subsequent.strip()) < 40 and END_HEADERS.match(slow):
+                            break
+                        section_lines.append(subsequent.strip())
+                    break
+
+        if not section_lines:
+            return experience
+
+        # ── Patterns ──────────────────────────────────────────────────────────────
 
         DATE_TOKEN = (
             r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
@@ -532,11 +508,9 @@ class ResumeParser:
         )
 
         DURATION_RE = re.compile(
-            rf"({DATE_TOKEN})\s*(?:[-–—to]+)\s*({DATE_TOKEN})",
+            rf"({DATE_TOKEN})\s*(?:[-–—\u2013\u2014to]+)\s*({DATE_TOKEN})",
             re.IGNORECASE,
         )
-
-        SINGLE_DATE_RE = re.compile(rf"({DATE_TOKEN})", re.IGNORECASE)
 
         INTERNSHIP_RE = re.compile(
             r"\b(?:intern(?:ship)?|trainee|apprentice|placement|industrial\s+training"
@@ -547,108 +521,180 @@ class ResumeParser:
         TITLE_SIGNAL_RE = re.compile(
             r"\b(?:engineer|developer|analyst|designer|manager|lead|architect|consultant"
             r"|specialist|associate|executive|coordinator|officer|intern|trainee"
-            r"|scientist|researcher|administrator|director|head|vp|president|cto|ceo)\b",
+            r"|scientist|researcher|administrator|director|head|vp|president|cto|ceo"
+            r"|development|testing|design|ui\/ux|frontend|backend|fullstack|full.stack"
+            r"|marketing|sales|support|operations|devops|qa|sre)\b",
             re.IGNORECASE,
         )
 
-        COMPANY_SEP_RE = re.compile(
-            r"(?:\bat\b|@|\|)\s*([A-Z][A-Za-z0-9\s&\.\,]{2,40}?)(?:\s*[\|,\-–]|$)",
+        BULLET_RE = re.compile(r"^[◦•\*▪➢➤►–\-]")
+
+        LOCATION_STRIP_RE = re.compile(
+            r'\s*[-–]?\s*(?:remote|on[\-\s]?site|hybrid)?\s*[-–]?\s*'
+            r'(?:dover|usa|uk|india|chennai|bangalore|mumbai|delhi|pune|hyderabad'
+            r'|pondicherry|chidambaram|coimbatore|tamil\s+nadu)[^$]*$',
+            re.IGNORECASE
         )
 
-        LOCATION_RE = re.compile(
-            r"^(?:remote|on[\s\-]?site|hybrid)?[\s\-]*[A-Za-z\s]+,\s*[A-Za-z\s]+$",
-            re.IGNORECASE,
-        )
+        def strip_location(text):
+            return LOCATION_STRIP_RE.sub("", text).strip(" ,–-")
 
-        BULLET_RE = re.compile(r"^[◦•\-\*▪➢➤►]")
+        def truncate_company(name):
+            """Truncate overly long company names at ' - ' separator."""
+            if name and len(name) > 50:
+                parts = re.split(r'\s+[-–]\s+', name)
+                return parts[0].strip()
+            return name
 
-        def is_date_line(line):
-            return bool(DURATION_RE.search(line) or SINGLE_DATE_RE.search(line))
-
+        # ── Block splitting: split when a line has content BEFORE a date range ─────
         blocks = []
         current = []
         for line in section_lines:
-            if line:
-                current.append(line)
-            else:
-                if current:
+            if not line:
+                continue
+            dm = DURATION_RE.search(line)
+            if dm and current:
+                before = line[:dm.start()].strip()
+                if before and len(before) > 5 and not BULLET_RE.match(before):
+                    # New entry line — end previous block, start new one with this line
                     blocks.append(current)
-                    current = []
-        if current:
-            blocks.append(current)
-
-        if len(blocks) <= 1 and len(section_lines) > 4:
-            blocks = []
-            current = []
-            for line in section_lines:
-                if not line:
-                    continue
-                if current and is_date_line(line):
-                    current.append(line)
+                    current = [line]
                     blocks.append(current)
                     current = []
                 else:
+                    # Date at end of bullet/continuation — belongs to current block
                     current.append(line)
-            if current:
-                blocks.append(current)
+                    blocks.append(current)
+                    current = []
+            else:
+                current.append(line)
+        if current:
+            blocks.append(current)
+        # Merge consecutive no-date blocks together, then merge with next dated block
+        merged_blocks = []
+        i = 0
+        while i < len(blocks):
+            block = blocks[i]
+            has_dur = any(DURATION_RE.search(l) for l in block)
+            if not has_dur:
+                # Keep merging with next blocks until we hit one with a date or run out
+                combined = block[:]
+                j = i + 1
+                while j < len(blocks):
+                    next_has_dur = any(DURATION_RE.search(l) for l in blocks[j])
+                    combined += blocks[j]
+                    j += 1
+                    if next_has_dur:
+                        break
+                merged_blocks.append(combined)
+                i = j
+            else:
+                merged_blocks.append(block)
+                i += 1
+        blocks = merged_blocks
 
         processed_titles = set()
 
         def parse_block(block):
             entry = {"position": "", "company": "", "duration": "", "type": "experience"}
+
+            # Skip blocks with no date range
+            non_bullet = [l for l in block if not BULLET_RE.match(l.strip()) and l.strip()]
+            if not non_bullet:
+                return None
+            if not non_bullet:
+                return None
+ 
+            # Also skip if no real company/title signal at all
+            full_text_nb = " ".join(non_bullet)
+            if len(full_text_nb.strip()) < 5:
+                return None
+
             title_lines = []
             company_lines = []
             duration_lines = []
 
             for line in block:
-                if BULLET_RE.match(line):
+                stripped = line.strip()
+                if not stripped or BULLET_RE.match(stripped):
                     continue
-                if LOCATION_RE.match(line):
-                    continue
-                dm = DURATION_RE.search(line)
-                sm = SINGLE_DATE_RE.search(line)
+
+                dm = DURATION_RE.search(stripped)
                 if dm:
                     duration_lines.append(f"{dm.group(1).strip()} - {dm.group(2).strip()}")
-                elif sm and len(line.strip()) < 40:
-                    duration_lines.append(sm.group(1).strip())
-                elif INTERNSHIP_RE.search(line):
-                    title_lines.append(line)
-                    m = re.search(r"\bat\s+([A-Z][A-Za-z0-9\s&\.]{2,40})", line)
+                    before = stripped[:dm.start()].strip().rstrip(",-– (")
+                    before = strip_location(before)
+                    before = re.sub(r'\s*\((?:remote|on.?site|hybrid)\)', '', before, flags=re.IGNORECASE).strip(" -–")
+                    if before and len(before) > 2:
+                        if TITLE_SIGNAL_RE.search(before) or INTERNSHIP_RE.search(before):
+                            title_lines.append(before)
+                        elif not re.search(r'[.!?]$', before):
+                            company_lines.append(before)
+                elif INTERNSHIP_RE.search(stripped):
+                    clean = strip_location(stripped)
+                    title_lines.append(clean)
+                    m = re.search(r"\bat\s+([A-Z][A-Za-z0-9\s&\.]{2,40})", clean)
                     if m:
                         company_lines.append(m.group(1).strip())
-                elif TITLE_SIGNAL_RE.search(line):
-                    title_lines.append(line)
+                elif TITLE_SIGNAL_RE.search(stripped) and not DURATION_RE.search(stripped):
+                    if not re.search(r'[.!?]$', stripped) and len(stripped.split()) <= 6:
+                        title_lines.append(stripped)
                 else:
-                    if len(line) < 50 and re.match(r"[A-Z]", line):
-                        company_lines.append(line)
+                    if (len(stripped) < 80
+                            and re.match(r"[A-Z]", stripped)
+                            and not re.search(r'[.!?]$', stripped)
+                            and len(stripped.split()) <= 10):
+                        company_lines.append(strip_location(stripped))
 
+            # Assign duration
             if duration_lines:
                 entry["duration"] = duration_lines[0]
 
+            # Assign position
             if title_lines:
                 raw = title_lines[0]
                 raw = re.sub(r"\s*[\|]\s*.*$", "", raw)
                 raw = raw.split(" at ")[0].strip()
                 raw = DURATION_RE.sub("", raw).strip()
                 entry["position"] = raw
-            elif company_lines:
-                entry["position"] = company_lines[0]
-                company_lines = company_lines[1:]
+            elif company_lines and duration_lines:
+                for line in block:
+                    s = line.strip()
+                    if (s and not BULLET_RE.match(s)
+                            and not DURATION_RE.search(s)
+                            and s not in company_lines
+                            and len(s) < 60
+                            and re.match(r"[A-Z]", s)
+                            and not re.search(r'[.!?]$', s)):
+                        entry["position"] = s
+                        break
 
-            remaining_companies = [c for c in company_lines if c.lower() != entry["position"].lower()]
-            if remaining_companies:
-                entry["company"] = remaining_companies[0]
+            # Assign company
+            remaining = [c for c in company_lines if c.lower() != entry["position"].lower()]
+            if remaining:
+                entry["company"] = truncate_company(strip_location(remaining[0]))
             else:
                 for line in block:
-                    m = COMPANY_SEP_RE.search(line)
+                    m = re.search(r"(?:\bat\b|@|\|)\s*([A-Z][A-Za-z0-9\s&\.]{2,40}?)(?:\s*[\|,]|$)", line)
                     if m:
-                        candidate = m.group(1).strip()
+                        candidate = strip_location(m.group(1).strip())
                         if candidate.lower() != entry["position"].lower():
-                            entry["company"] = candidate
+                            entry["company"] = truncate_company(candidate)
                             break
 
+            # If position and company ended up the same, clear position
+            # (frontend will use type fallback: "Internship" etc.)
+            if (entry["position"] and entry["company"]
+                    and entry["position"].lower() == entry["company"].lower()):
+                entry["position"] = ""
+
+            # Truncate overly long company names
+            if entry["company"] and len(entry["company"]) > 50:
+                entry["company"] = truncate_company(entry["company"])
+
+            # spaCy ORG fallback
             if not entry["company"] and hasattr(self, "nlp"):
-                doc = self.nlp(" ".join(block))
+                doc = self.nlp(" ".join(non_bullet))
                 for ent in doc.ents:
                     if ent.label_ == "ORG":
                         if ent.text.lower() != entry["position"].lower():
@@ -659,12 +705,16 @@ class ResumeParser:
                 entry["type"] = "internship"
 
             return entry
+        #print("=== EXP BLOCKS ===")
+        #for i, b in enumerate(blocks):
+        #    print(f"Block {i}: {b}")
+        #print("==================")
 
         for block in blocks:
             if not block:
                 continue
             result = parse_block(block)
-            if result["position"] or result["company"]:
+            if result and (result["position"] or result["company"]):
                 key = (result["position"] + result["company"]).lower().strip()
                 if key and key not in processed_titles:
                     experience.append(result)

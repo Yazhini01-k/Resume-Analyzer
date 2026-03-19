@@ -26,12 +26,12 @@ const ResumeUpload = () => {
   sessionStorage.getItem("showTopAnalysis") === "true"
 );
 const cleanTitle = (title) => {
-    if (!title) return 'Software Engineer';
+    if (!title) return '';  // ← change 'Software Engineer' to ''
     const cleaned = title
       .replace(/^[•\s]+/, '')
       .replace(/[•\s]*(Completed|In Progress|Status|Finished)[•\s]*/gi, '')
       .trim();
-    return cleaned || 'Software Engineer';
+    return cleaned || '';
   };
 
 
@@ -689,7 +689,7 @@ const cleanTitle = (title) => {
 
                                         <Text strong style={{ color: '#722ed1', fontSize: '16px' }}>
 
-                                          {cleanTitle(exp.position || exp.title)}
+                                          {cleanTitle(exp.position || exp.title) || (exp.type === 'internship' ? 'Internship' : exp.company || 'Experience')}
 
                                         </Text>
 

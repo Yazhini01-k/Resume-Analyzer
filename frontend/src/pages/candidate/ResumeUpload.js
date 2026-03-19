@@ -25,6 +25,15 @@ const ResumeUpload = () => {
   const [showTopAnalysis, setShowTopAnalysis] = useState(
   sessionStorage.getItem("showTopAnalysis") === "true"
 );
+const cleanTitle = (title) => {
+    if (!title) return 'Software Engineer';
+    const cleaned = title
+      .replace(/^[•\s]+/, '')
+      .replace(/[•\s]*(Completed|In Progress|Status|Finished)[•\s]*/gi, '')
+      .trim();
+    return cleaned || 'Software Engineer';
+  };
+
 
   const queryClient = useQueryClient();
 
@@ -586,7 +595,7 @@ const ResumeUpload = () => {
                                   <div>
 
                                     {latestResume.extracted_education.map((edu, index) => (
-
+                                      console.log('EDU DATA:', edu),
                                       <div key={index} style={{ 
 
                                         marginBottom: '16px',
@@ -602,24 +611,19 @@ const ResumeUpload = () => {
                                       }}>
 
                                         <Text strong style={{ color: '#fa8c16', fontSize: '16px' }}>
-
-                                          {edu.degree || 'Bachelor Degree'}
-
-                                        </Text>
-
-                                        <br />
-
-                                        <Text style={{ fontSize: '14px', color: '#666', marginTop: '4px', display: 'block' }}>
-
-                                          {edu.institution || 'University'}
-
-                                        </Text>
-
-                                        <Text type="secondary" style={{ fontSize: '12px', marginTop: '4px', display: 'block' }}>
-
-                                          {edu.year || '2020'} • {edu.field || 'Computer Science'}
-
-                                        </Text>
+                                            {edu.degree ? edu.degree.split(',')[0].trim() : 'Bachelor Degree'}
+                                          </Text>
+                                          <br />
+                                          {edu.institution && !edu.degree?.toLowerCase().includes(edu.institution.toLowerCase()) && (
+                                            <Text style={{ fontSize: '14px', color: '#666', display: 'block' }}>
+                                              {edu.institution}
+                                            </Text>
+                                          )}
+                                          {edu.year && (
+                                            <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
+                                              {edu.year}
+                                            </Text>
+                                          )}
 
                                       </div>
 
@@ -685,7 +689,7 @@ const ResumeUpload = () => {
 
                                         <Text strong style={{ color: '#722ed1', fontSize: '16px' }}>
 
-                                          {exp.position || exp.title || 'Software Engineer'}
+                                          {cleanTitle(exp.position || exp.title)}
 
                                         </Text>
 
@@ -698,10 +702,11 @@ const ResumeUpload = () => {
                                         </Text>
 
                                         <Text type="secondary" style={{ fontSize: '12px', marginTop: '4px', display: 'block' }}>
-
-                                          {exp.duration || exp.years ? `${exp.duration || exp.years} years` : '2 years'}
-
-                                        </Text>
+                                                  {(() => {
+                                                    const raw = exp.duration || (exp.years ? `${exp.years} years` : '');
+                                                    return raw.replace(/^[•\s]*(Completed|In Progress|Finished)[•\s]*$/gi, '').trim();
+                                                  })()}
+                                                </Text>
 
                                       </div>
 
@@ -1331,18 +1336,13 @@ const ResumeUpload = () => {
                       {selectedResume.extracted_education.map((edu, index) => (
 
                         <div key={index} style={{ marginBottom: 8 }}>
-
-                          <Text strong>{edu.degree || edu.institution}</Text>
-
-                          <br />
-
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-
-                            {edu.year && `${edu.year} • `} 
-
-                            {edu.field && edu.field}
-
-                          </Text>
+                            <Text strong>{edu.degree || 'Degree'}</Text>
+                            <br />
+                            <Text style={{ fontSize: 13 }}>{edu.institution}</Text>
+                            <br />
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {[edu.year, edu.field_of_study].filter(Boolean).join(' • ')}
+                            </Text>
 
                         </div>
 
@@ -1380,17 +1380,16 @@ const ResumeUpload = () => {
 
                         <div key={index} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
 
-                          <Text strong>{exp.position || exp.title}</Text>
+                          <Text strong>{cleanTitle(exp.position || exp.title) || exp.company || 'Work Experience'}</Text>
 
                           <br />
 
                           <Text type="secondary" style={{ fontSize: 12 }}>
 
-                            {exp.company && `${exp.company} • `}
-
-                            {exp.duration && exp.duration}
-
-                            {exp.years && `${exp.years} years`}
+                                   {[
+                              exp.company,
+                              exp.duration || (exp.years ? `${exp.years} years` : null)
+                            ].filter(Boolean).join(' • ')}
 
                           </Text>
 

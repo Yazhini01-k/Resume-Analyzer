@@ -41,73 +41,37 @@ from accounts.models import User
 
 
 class ResumeUploadView(generics.CreateAPIView):
-
     """Upload and process resume"""
-
     serializer_class = ResumeCreateSerializer
-
     permission_classes = [permissions.IsAuthenticated]
-
-    parser_classes = [MultiPartParser, FormParser]
-
-    
-
+    parser_classes = [MultiPartParser, FormParser]  
     def perform_create(self, serializer):
-
         # Save the resume file
-
-        resume = serializer.save(user=self.request.user)
-
-        
-
+        resume = serializer.save(user=self.request.user)     
         # Start async processing (in production, use Celery)
-
         try:
-
             self._process_resume(resume)
-
         except Exception as e:
-
             resume.processing_status = 'failed'
-
             resume.error_message = str(e)
-
             resume.save()
 
     
 
     def _process_resume(self, resume):
-
         """Process uploaded resume"""
-
         # Update status
-
         resume.processing_status = 'processing'
-
         resume.save()
-
-        
-
         # Extract file extension
-
         file_extension = resume.file.name.split('.')[-1].lower()
-
         resume.file_type = file_extension
-
         resume.file_size = resume.file.size
-
         resume.original_filename = resume.file.name.split('/')[-1]
-
-        
-
         # Extract text
-
         extractor = ResumeTextExtractor()
-
         file_path = resume.file.path
-
         raw_text = extractor.extract_text(file_path, file_extension)
-
         resume.raw_text = raw_text
 
         

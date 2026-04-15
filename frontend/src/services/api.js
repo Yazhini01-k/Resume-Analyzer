@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://192.168.137.1:8000/api';
 
 // Create axios instance
 const api = axios.create({
@@ -70,7 +70,7 @@ export const jobsAPI = {
   getList: (params) => api.get('/jobs/', { params }),
   getDetail: (id) => api.get(`/jobs/${id}/`),
   create: (data) => api.post('/jobs/create/', data),
-  update: (id, data) => api.put(`/jobs/${id}/update/`, data),
+  update: (id, data) => api.patch(`/jobs/${id}/update/`, data),
   delete: (id) => api.delete(`/jobs/${id}/delete/`),
   getRecommendations: () => api.get('/jobs/dynamic-recommendations/'),
   getRecommendedJobs: () => api.get('/ml/recommended-jobs/'),

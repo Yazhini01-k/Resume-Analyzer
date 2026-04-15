@@ -595,7 +595,7 @@ const JobRecommendations = () => {
               // JobMatch object has all score breakdown fields from API
 
               const job = {
-                id: jobMatch.job || jobMatch.id, // Handle both job and id fields
+                id: jobMatch.job_id || jobMatch.id, // Handle both job and id fields
                 title: jobMatch.job_title || jobMatch.title,
                 company: jobMatch.job_company || jobMatch.company,
                 description: jobMatch.description || 'Job description...',
@@ -606,6 +606,8 @@ const JobRecommendations = () => {
                 salary_range: jobMatch.salary_range || 'Salary range',
                 created_at: jobMatch.created_at,
                 application_count: jobMatch.application_count || 0,
+                skill_requirements: jobMatch.skill_requirements || [],
+                
                 // Use dynamic scores from API response
                 overall_score: jobMatch.match_percentage || jobMatch.overall_score || 0,
                 skills_match_score: jobMatch.skills_match_score || 0,
@@ -614,6 +616,12 @@ const JobRecommendations = () => {
                 missing_skills: jobMatch.missing_skills || [],
                 matched_skills: jobMatch.matched_skills || []
               };
+              console.log("JOB MATCH FULL:", jobMatch);
+              console.log("JOB ID:", job.id);
+              const storedSkills = JSON.parse(
+                localStorage.getItem(`job_skills_${job.id}`) || '[]'
+              );
+              console.log("STORED SKILLS:", storedSkills);
 
               console.log('Created job object:', job);
 
@@ -685,30 +693,24 @@ const JobRecommendations = () => {
 
 
 
-                          {job.required_skills && job.required_skills.length > 0 && (
-
+                          
+                          {job.matched_skills?.length > 0 && (
                             <div style={{ marginTop: 12 }}>
-
                               <Text strong>Required Skills: </Text>
-
                               <div style={{ marginTop: 4 }}>
-
-                                {job.required_skills.slice(0, 6).map((skill, index) => (
-
-                                  <Tag key={index} size="small">{skill}</Tag>
-
+                                {job.matched_skills.slice(0, 6).map((skill, index) => (
+                                  <Tag key={index} size="small" color="green">
+                                    {skill}
+                                  </Tag>
                                 ))}
 
-                                {job.required_skills.length > 6 && (
-
-                                  <Tag size="small">+{job.required_skills.length - 6} more</Tag>
-
+                                {job.matched_skills.length > 6 && (
+                                  <Tag size="small">
+                                    +{job.matched_skills.length - 6} more
+                                  </Tag>
                                 )}
-
                               </div>
-
                             </div>
-
                           )}
 
 
@@ -804,10 +806,12 @@ const JobRecommendations = () => {
                             </div>
 
                             <div>
+                              {/*
 
                               <Text strong>Education: </Text>
 
                               <Text>{(jobMatch.education_match_score || 0).toFixed(1)}%</Text>
+                              */}
 
                             </div>
 

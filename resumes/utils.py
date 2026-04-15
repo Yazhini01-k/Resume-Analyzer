@@ -11,11 +11,12 @@ from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.stem import WordNetLemmatizer
 import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
+from pdf2image import convert_from_path
 
 
 class ResumeTextExtractor:
     """Extract text from various resume file formats"""
-
+    
     def __init__(self):
         self.nlp = spacy.load('en_core_web_sm')
         self.stop_words = set(stopwords.words('english'))
@@ -34,13 +35,22 @@ class ResumeTextExtractor:
         except Exception as e:
             raise Exception(f"Error extracting text: {str(e)}")
 
+    
     def _extract_from_pdf(self, file_path):
         text = ""
+
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text(x_tolerance=2, y_tolerance=2)
                 if page_text:
                     text += page_text + "\n"
+
+        # 🔥 If no text → use OCR
+        if len(text.strip()) < 50:
+            images = convert_from_path(file_path)
+            for img in images:
+                text += pytesseract.image_to_string(img)
+
         return text.strip()
 
     def _extract_from_docx(self, file_path):

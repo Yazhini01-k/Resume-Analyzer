@@ -65,7 +65,7 @@ class JobDetailView(generics.RetrieveAPIView):
     """Get job details"""
     serializer_class = JobSerializer
     permission_classes = [permissions.IsAuthenticated]
-    queryset = Job.objects.filter(is_active=True)
+    queryset = Job.objects.all()
     
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -90,7 +90,7 @@ class JobCreateView(generics.CreateAPIView):
 
 class JobUpdateView(generics.UpdateAPIView):
     """Update job posting (HR only)"""
-    serializer_class = JobCreateSerializer
+    serializer_class = JobSerializer
     permission_classes = [permissions.IsAuthenticated]
     queryset = Job.objects.all()
     

@@ -163,47 +163,25 @@ const cleanTitle = (title) => {
 
 
   const uploadProps = {
-
     name: 'file',
-
     multiple: false,
-
     accept: '.pdf,.docx,.jpg,.jpeg,.png',
-
     beforeUpload: (file) => {
-
       console.log('beforeUpload called with file:', file.name, file.type);
-
-      
-
       // Check file size (5MB limit)
-
       const isLt5M = file.size / 1024 / 1024 < 5;
-
       if (!isLt5M) {
-
         message.error('File must be smaller than 5MB!');
-
         return false;
-
       }
-
-
-
       // Check file type
-
       const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-
                           'image/jpeg', 'image/jpg', 'image/png'];
-
       if (!allowedTypes.includes(file.type)) {
-
         message.error('Only PDF, DOCX, and image files are allowed!');
-
         return false;
 
       }
-
 
 
       console.log('File validation passed, calling handleUpload...');
@@ -233,34 +211,16 @@ const cleanTitle = (title) => {
 
 
   const handleUpload = async (file) => {
-
-    console.log('Upload started for file:', file.name, 'Type:', file.type, 'Size:', file.size);
-
-    
-
+    console.log('Upload started for file:', file.name, 'Type:', file.type, 'Size:', file.size); 
     const formData = new FormData();
-
     formData.append('file', file);
-
     formData.append('title', file.name.replace(/\.[^/.]+$/, '')); // Remove extension
-
-
-
     console.log('FormData entries:');
-
     for (let [key, value] of formData.entries()) {
-
       console.log(`${key}:`, value);
-
     }
-
-
-
     setUploading(true);
-
     setUploadProgress(0);
-
-
 
     // Simulate progress
 

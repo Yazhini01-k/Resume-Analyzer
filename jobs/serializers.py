@@ -23,7 +23,7 @@ class JobSkillRequirementSerializer(serializers.ModelSerializer):
 class JobSerializer(serializers.ModelSerializer):
     """Serializer for Job model"""
     posted_by_name = serializers.CharField(source='posted_by.get_full_name', read_only=True)
-    skill_requirements = JobSkillRequirementSerializer(source='skill_requirements_set', many=True, read_only=True)
+    skill_requirements = JobSkillRequirementSerializer(many=True, required=False)
     
     class Meta:
         model = Job
@@ -32,7 +32,7 @@ class JobSerializer(serializers.ModelSerializer):
                  'required_skills', 'preferred_skills', 'skill_keywords', 'feature_vector',
                  'posted_by', 'posted_by_name', 'is_active', 'application_count', 
                  'view_count', 'external_url', 'company_logo', 'created_at', 
-                 'updated_at', 'deadline', 'skill_requirements']
+                 'updated_at', 'deadline', 'skill_requirements','is_active']
         read_only_fields = ['id', 'posted_by', 'application_count', 'view_count', 
                            'created_at', 'updated_at', 'feature_vector', 'skill_keywords']
 
@@ -48,7 +48,7 @@ class JobCreateSerializer(serializers.ModelSerializer):
                  'deadline', 'external_url', 'skill_requirements']
     
     def create(self, validated_data):
-        skill_requirements_data = validated_data.pop('skill_requirements_set', [])
+        skill_requirements_data = validated_data.pop('skill_requirements', [])
         job = Job.objects.create(**validated_data)
         
         # Create skill requirements
@@ -62,7 +62,7 @@ class JobCreateSerializer(serializers.ModelSerializer):
             )
         
         # Process job description to extract skills
-        self._extract_job_skills(job)
+        # self._extract_job_skills(job)
         
         return job
     
@@ -75,8 +75,8 @@ class JobCreateSerializer(serializers.ModelSerializer):
             job.description + ' ' + (job.requirements or '')
         )
         
-        job.required_skills = parsed_skills['required_skills']
-        job.preferred_skills = parsed_skills['preferred_skills']
+        # job.required_skills = parsed_skills['required_skills']
+        # job.preferred_skills = parsed_skills['preferred_skills']
         job.skill_keywords = parsed_skills['all_skills']
         
         # Create feature vector

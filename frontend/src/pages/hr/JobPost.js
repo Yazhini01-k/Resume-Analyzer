@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Typography, Form, Input, Select, Button, message, Space, Row, Col } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { jobsAPI } from '../../services/api';
+import { useParams } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -12,6 +13,9 @@ const JobPost = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const queryClient = useQueryClient();
+  const { id } = useParams();
+
+
 
   // Fetch job skills for selection
   const { data: jobSkills } = useQuery(
@@ -30,6 +34,26 @@ const JobPost = () => {
       },
     }
   );
+  const { data: jobData } = useQuery(
+    ['job-detail', id],
+    () => jobsAPI.getDetail(id),
+    {
+      enabled: !!id,
+      select: (res) => res?.data,
+    }
+  );
+  useEffect(() => {
+    if (jobData) {
+      const skillIds = jobData.skill_requirements
+        ? jobData.skill_requirements.map((item) => item.skill.id)
+        : [];
+
+      form.setFieldsValue({
+        ...jobData,
+        required_skills: skillIds,
+      });
+    }
+  }, [jobData, form]);
 
   // Create job mutation
   const createJobMutation = useMutation(jobsAPI.create, {
@@ -47,12 +71,20 @@ const JobPost = () => {
 
   const handleSubmit = async (values) => {
     setLoading(true);
-    
-    // Format the data for API
-    const jobData = {
+
+    const jobDataFormatted = {
       ...values,
-      skill_requirements: Array.isArray(values.required_skills) 
-        ? values.required_skills.map((skillId, index) => ({
+      // ✅ ONLY STORE SELECTED SKILLS (names)
+      required_skills: values.required_skills
+        ? values.required_skills.map((id) => {
+            const skill = jobSkills.find((s) => s.id === id);
+            return skill?.name;
+          })
+        : [],
+
+      // keep this if backend needs it
+      skill_requirements: values.required_skills
+        ? values.required_skills.map((skillId) => ({
             skill_id: skillId,
             importance: 'required',
             experience_years: 0,
@@ -61,16 +93,41 @@ const JobPost = () => {
     };
 
     try {
-      await createJobMutation.mutateAsync(jobData);
+      if (id) {
+        // EDIT
+        await jobsAPI.update(id, jobDataFormatted);
+        localStorage.setItem(
+          `job_skills_${id}`,
+          JSON.stringify(jobDataFormatted.required_skills)
+        );
+        message.success('Job updated!');
+      } else {
+        // CREATE
+        const response = await createJobMutation.mutateAsync(jobDataFormatted);
+
+        // ✅ SAVE SELECTED SKILLS FOR NEW JOB
+        const newJobId = response?.data?.id;
+
+        if (newJobId) {
+          localStorage.setItem(
+            `job_skills_${newJobId}`,
+            JSON.stringify(jobDataFormatted.required_skills)
+          );
+        }
+      }
+
+      queryClient.invalidateQueries('my-posted-jobs');
     } catch (error) {
-      console.error('Job posting error:', error);
+      message.error('Error');
     }
+
+    setLoading(false);
   };
 
   return (
     <div>
       <div className="page-header">
-        <Title level={2}>Post New Job</Title>
+        <Title level={2}>{id ? 'Edit Job' : 'Post New Job'}</Title>
         <Text type="secondary">
           Create a new job posting to attract qualified candidates
         </Text>
@@ -233,7 +290,7 @@ const JobPost = () => {
                   loading={loading}
                   icon={<SaveOutlined />}
                 >
-                  Post Job
+                  {id ? 'Update Job' : 'Post Job'}
                 </Button>
                 <Button onClick={() => form.resetFields()}>
                   Reset

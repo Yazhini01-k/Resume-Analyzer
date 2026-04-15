@@ -8,7 +8,8 @@ import {
   RightOutlined,
   EyeOutlined
 } from '@ant-design/icons';
-import { useQuery } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { message } from 'antd';
 import { jobsAPI, applicationsAPI } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 
@@ -17,6 +18,21 @@ const { Title, Text } = Typography;
 const HRDashboard = () => {
   const navigate = useNavigate();
 
+  // ✅ ADD THIS BLOCK HERE
+  const queryClient = useQueryClient();
+
+  const deleteJobMutation = useMutation(
+    (jobId) => jobsAPI.delete(jobId),
+    {
+      onSuccess: () => {
+        message.success('Job deleted successfully');
+        queryClient.invalidateQueries('my-posted-jobs');
+      },
+      onError: () => {
+        message.error('Failed to delete job');
+      },
+    }
+  );
   // Fetch HR's posted jobs
   const { data: postedJobs } = useQuery(
     'my-posted-jobs',
@@ -62,7 +78,9 @@ const HRDashboard = () => {
     }
   );
 
-  const recentJobs = postedJobs?.slice(0, 5);
+  const recentJobs = postedJobs
+    ?.filter(job => job.is_active)   // ✅ ONLY ACTIVE
+    ?.slice(0, 5);
 
   const applicationColumns = [
     {
@@ -210,7 +228,14 @@ const HRDashboard = () => {
                           type="link" 
                           icon={<RightOutlined />}
                           onClick={() => navigate('/hr/job-post')}
-                        />
+                        />,
+                        <Button 
+                          danger
+                          type="link"
+                          onClick={() => deleteJobMutation.mutate(job.id)}
+                        >
+                          Delete
+                        </Button>
                       ]}
                     >
                       <List.Item.Meta

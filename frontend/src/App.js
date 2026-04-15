@@ -11,7 +11,9 @@ import ResumeUpload from './pages/candidate/ResumeUpload';
 import JobRecommendations from './pages/candidate/JobRecommendations';
 import SkillGap from './pages/candidate/SkillGap';
 import HRDashboard from './pages/hr/Dashboard';
+import JobManagement from './pages/hr/JobManagement';
 import JobPost from './pages/hr/JobPost';
+import JobDetail from './pages/hr/JobDetail';
 import CandidateRanking from './pages/hr/CandidateRanking';
 import './App.css';
 
@@ -114,7 +116,7 @@ function App() {
                   navigate('/hr/dashboard');
                   break;
                 case 'jobs':
-                  navigate('/hr/job-post');
+                  navigate('/hr/job-management');
                   break;
                 case 'candidates':
                   navigate('/hr/candidate-ranking');
@@ -167,7 +169,10 @@ function App() {
             
             {/* HR Routes */}
             <Route path="/hr/dashboard" element={<HRDashboard />} />
+            <Route path="/hr/job-management" element={<JobManagement />} />
+            <Route path="/hr/job/:id" element={<JobDetail />} />
             <Route path="/hr/job-post" element={<JobPost />} />
+            <Route path="/hr/job-post/:id" element={<JobPost />} />
             <Route path="/hr/candidate-ranking" element={<CandidateRanking />} />
             
             {/* Default redirect */}

@@ -145,7 +145,10 @@ class JobRecommendationEngine:
                     'salary_range': job.salary_range,
                     'job_type': job.job_type,
                     'experience_level': job.experience_level,
-                    'required_skills': job.required_skills or [],
+                    'required_skills': [
+                        req.skill.name.lower()
+                        for req in job.skill_requirements.all()
+                    ],
                     'preferred_skills': job.preferred_skills or []
                 }
                 
@@ -171,8 +174,15 @@ class JobRecommendationEngine:
         
         # Fallback to basic scoring if ML is not available
         # Skills matching (60% weight)
+        job_required_skills = [
+            req.skill.name.lower()
+            for req in job.skill_requirements.all()
+        ]
+
         skills_score, matched_skills, missing_skills, skill_details = self._calculate_skills_match(
-            resume.extracted_skills, job.required_skills, job.preferred_skills
+            resume.extracted_skills,
+            job_required_skills,
+            job.preferred_skills
         )
         
         # Experience matching (20% weight)
@@ -202,12 +212,12 @@ class JobRecommendationEngine:
         # Generate match reason
         reason = self._generate_match_reason(
             skills_score, experience_score, location_score, salary_score,
-            len(matched_skills), len(job.required_skills)
+            len(matched_skills), len(job_required_skills)
         )
         
         # Calculate confidence level
         confidence = self._calculate_confidence(
-            skills_score, len(matched_skills), len(job.required_skills)
+            skills_score, len(matched_skills), len(job_required_skills)
         )
         
         return {
@@ -237,7 +247,11 @@ class JobRecommendationEngine:
         
         # Calculate required skills match (70% of skills score)
         matched_required = resume_skill_set & required_skill_set
-        required_match_percentage = (len(matched_required) / len(required_skill_set)) * 70
+        required_match_percentage = (len(matched_required) / len(required_skill_set)) * 100
+        missing_count = len(required_skill_set - matched_required)
+        penalty = missing_count * 5
+
+        total_skills_score = max(0, required_match_percentage - penalty)
         
         # Calculate preferred skills match (30% of skills score)
         preferred_match_percentage = 0

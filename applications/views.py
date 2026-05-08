@@ -67,7 +67,6 @@ class ApplicationCreateView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def perform_create(self, serializer):
-        # Store IP and user agent
         serializer.save(
             ip_address=self.get_client_ip(self.request),
             user_agent=self.request.META.get('HTTP_USER_AGENT', '')

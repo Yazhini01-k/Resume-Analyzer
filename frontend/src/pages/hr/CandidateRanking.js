@@ -6,9 +6,9 @@ import {
 import { 
   TeamOutlined, 
   EyeOutlined, 
-  DownloadOutlined,
   MailOutlined,
-  FilterOutlined
+  FilterOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { jobsAPI, applicationsAPI } from '../../services/api';
@@ -230,18 +230,6 @@ const CandidateRanking = () => {
       ),
     },
     {
-      title: 'Education',
-      dataIndex: 'education_match_score',
-      key: 'education_match',
-      render: (score) => (
-        <div style={{ textAlign: 'center' }}>
-          <Text style={{ color: getMatchScoreColor(score) }}>
-            {score?.toFixed(1)}%
-          </Text>
-        </div>
-      ),
-    },
-    {
       title: 'Matched Skills',
       dataIndex: 'matched_skills',
       key: 'matched_skills',
@@ -293,6 +281,19 @@ const CandidateRanking = () => {
           >
             Review
           </Button>
+           <Button
+              type="link"
+              icon={<FileTextOutlined />}
+              onClick={() => {
+                if (record.resume_file) {
+                  window.open(record.resume_file, '_blank');
+                } else {
+                  message.warning('Resume not available');
+                }
+              }}
+            >
+              Resume
+            </Button>
         </Space>
       ),
     },
@@ -454,7 +455,7 @@ const CandidateRanking = () => {
                 showQuickJumper: true,
                 showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} candidates`,
               }}
-              scroll={{ x: 1200 }}
+              scroll={{ x: 1000 }}
             />
           )}
         </Card>
@@ -486,10 +487,6 @@ const CandidateRanking = () => {
                       <div>
                         <Text strong>Experience: </Text>
                         <Text>{selectedApplication.experience_match_score.toFixed(1)}%</Text>
-                      </div>
-                      <div>
-                        <Text strong>Education: </Text>
-                        <Text>{selectedApplication.education_match_score.toFixed(1)}%</Text>
                       </div>
                     </Space>
                   </Card>

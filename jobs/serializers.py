@@ -39,7 +39,7 @@ class JobSerializer(serializers.ModelSerializer):
 
 class JobCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating jobs"""
-    skill_requirements = JobSkillRequirementSerializer(source='skill_requirements_set', many=True, required=False)
+    skill_requirements = JobSkillRequirementSerializer( many=True, required=False)
     
     class Meta:
         model = Job
@@ -121,14 +121,20 @@ class JobMatchSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     resume_details = serializers.SerializerMethodField()
     application_id = serializers.SerializerMethodField()
+    resume_file = serializers.SerializerMethodField()
     
+    def get_resume_file(self, obj):
+        if obj.resume and obj.resume.file:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.resume.file.url)
+        return None
     class Meta:
         model = JobMatch
         fields = ['id', 'resume', 'resume_title', 'job', 'job_title', 'job_company',
                  'overall_score', 'skills_match_score', 'experience_match_score', 
                  'education_match_score', 'matched_skills', 'missing_skills', 
                  'additional_skills', 'match_reason', 'recommendation_rank', 'created_at',
-                 'candidate_details', 'applied_at', 'status', 'resume_details', 'application_id']
+                 'candidate_details', 'applied_at', 'status', 'resume_details', 'application_id', 'resume_file']
         read_only_fields = ['id', 'created_at']
     
     def get_candidate_details(self, obj):

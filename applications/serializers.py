@@ -13,7 +13,13 @@ class ApplicationSerializer(serializers.ModelSerializer):
     candidate_details = UserSerializer(source='candidate', read_only=True)
     job_details = JobSerializer(source='job', read_only=True)
     resume_details = ResumeSerializer(source='resume', read_only=True)
+    resume_file = serializers.SerializerMethodField()
     
+    def get_resume_file(self, obj):
+        if obj.resume and obj.resume.file:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.resume.file.url)
+        return None
     class Meta:
         model = Application
         fields = ['id', 'job', 'candidate', 'resume', 'cover_letter', 'additional_notes',
@@ -22,7 +28,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
                  'match_score', 'skills_match_score', 'experience_match_score', 
                  'education_match_score', 'status', 'hr_notes', 'rejection_reason',
                  'applied_at', 'updated_at', 'last_status_change', 'candidate_details',
-                 'job_details', 'resume_details']
+                 'job_details', 'resume_details', 'resume_file']
         read_only_fields = ['id', 'candidate', 'match_score', 'skills_match_score',
                            'experience_match_score', 'education_match_score', 'applied_at',
                            'updated_at', 'last_status_change']
@@ -40,20 +46,35 @@ class ApplicationCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = self.context['request'].user
         job = attrs['job']
-        resume = attrs['resume']
-        
-        # Check if user owns the resume
-        if resume.user != user:
-            raise serializers.ValidationError("You can only use your own resume")
-        
+
+        # ✅ Get latest uploaded resume automatically
+        from resumes.models import Resume
+
+        latest_resume = Resume.objects.filter(
+            user=user,
+            processing_status='completed'
+        ).order_by('-created_at').first()
+
+        if not latest_resume:
+            raise serializers.ValidationError(
+                "Please upload a resume before applying"
+            )
+
+        # attach resume automatically
+        attrs['resume'] = latest_resume
+
         # Check if already applied
         if Application.objects.filter(candidate=user, job=job).exists():
-            raise serializers.ValidationError("You have already applied to this job")
-        
-        # Check if job is still active
+            raise serializers.ValidationError(
+                "You have already applied to this job"
+            )
+
+        # Check if job active
         if not job.is_active:
-            raise serializers.ValidationError("This job is no longer active")
-        
+            raise serializers.ValidationError(
+                "This job is no longer active"
+            )
+
         return attrs
     
     def create(self, validated_data):

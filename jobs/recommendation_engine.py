@@ -32,10 +32,10 @@ class JobRecommendationEngine:
     """
     
     def __init__(self):
-        self.skill_weight = 0.6  # 60% weight for skills
+        self.skill_weight = 0.8  # 0% weight for skills
         self.experience_weight = 0.2  # 20% weight for experience
-        self.location_weight = 0.1  # 10% weight for location
-        self.salary_weight = 0.1  # 10% weight for salary
+        self.location_weight = 0.0  # 10% weight for location
+        self.salary_weight = 0.0  # 10% weight for salary
     
     def get_user_recommendations(self, user, limit=10, min_score=30.0):
         """
@@ -74,7 +74,7 @@ class JobRecommendationEngine:
                         'overall_score': match_result['overall_score'],
                         'skills_match_score': match_result['skills_score'],
                         'experience_match_score': match_result['experience_score'],
-                        'education_match_score': match_result['education_score'],  # ✅ Added
+                        #'education_match_score': match_result['education_score'],  # ✅ Added
                         'location_match_score': match_result['location_score'],
                         'salary_match_score': match_result['salary_score'],
                         'matched_skills': match_result['matched_skills'],
@@ -91,7 +91,7 @@ class JobRecommendationEngine:
                     job_match.overall_score = match_result['overall_score']
                     job_match.skills_match_score = match_result['skills_score']
                     job_match.experience_match_score = match_result['experience_score']
-                    job_match.education_match_score = match_result['education_score']  # ✅ Added
+                    #job_match.education_match_score = match_result['education_score']  # ✅ Added
                     job_match.location_match_score = match_result['location_score']
                     job_match.salary_match_score = match_result['salary_score']
                     job_match.matched_skills = match_result['matched_skills']
@@ -159,7 +159,7 @@ class JobRecommendationEngine:
                     'overall_score': round(match_result['overall_score'], 2),
                     'skills_score': round(match_result['skills_score'], 2),
                     'experience_score': round(match_result['experience_score'], 2),
-                    'education_score': round(match_result['education_score'], 2),
+                    #'education_score': round(match_result['education_score'], 2),
                     'location_score': 0.0,  # Not calculated in ML version
                     'salary_score': 0.0,  # Not calculated in ML version
                     'matched_skills': match_result['matched_skills'],
@@ -204,9 +204,9 @@ class JobRecommendationEngine:
         # Calculate overall score
         overall_score = (
             skills_score * self.skill_weight +
-            experience_score * self.experience_weight +
-            location_score * self.location_weight +
-            salary_score * self.salary_weight
+            experience_score * self.experience_weight 
+            #location_score * self.location_weight +
+            #salary_score * self.salary_weight
         )
         
         # Generate match reason

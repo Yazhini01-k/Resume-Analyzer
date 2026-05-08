@@ -154,7 +154,7 @@ def rank_candidates_for_job(request, job_id):
     ).select_related('resume', 'user', 'resume__user').order_by('-overall_score')
     
     # Serialize matches
-    serializer = JobMatchSerializer(matches, many=True)
+    serializer = JobMatchSerializer(matches, many=True, context={'request': request})
     
     return Response({
         'job': JobSerializer(job).data,
